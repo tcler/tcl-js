@@ -1,6 +1,7 @@
 # test suite for TclJS
 # This file is designed so it can also run in a tclsh. Some JavaScript goodies,
-# like 1/0, sqrt(-1) were excluded from the tests. 
+# like 1/0, sqrt(-1) were excluded from the tests.
+# [clock format 0] was excluded because the timezone string differed.
 
 set version 0.5.3
 set total  0
