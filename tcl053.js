@@ -46,9 +46,9 @@ function TclInterp () {
         } else {this.callframe[this.level][name] = val;}
         return val;
     }
-    this.setVar("argc",    process.argv.length-2);
+    this.setVar("argc",  process.argv.length-2);
     this.setVar("argv0", process.argv[1]);
-    this.setVar("argv",    process.argv.slice(2));
+    this.setVar("argv",  process.argv.slice(2));
     this.setVar("errorInfo", "");
 
     this.incrLevel = function() {
@@ -162,7 +162,7 @@ function TclInterp () {
     }
     //---------------------------------- Commands in alphabetical order
     this.registerCommand("append", function (interp, args) {
-        this.requireMinArgc(args, 2);
+        this.arity(args, 2, Infinity);
         var vname = args[1].toString();
 	try {var str = interp.getVar(vname);} catch(e) {var str = "";}
 	for (var i = 2; i < args.length; i++) str += args[i].toString();
@@ -174,7 +174,7 @@ function TclInterp () {
         return;
       });
     this.registerCommand("cd", function (interp, args) {
-	this.requireArgcRange(args, 1, 2);
+	this.arity(args, 1, 2);
 	var dir = process.env.HOME;
 	if (args.length == 2) dir = args[1].toString();
 	process.chdir(dir);
@@ -216,7 +216,7 @@ function TclInterp () {
 	throw 'key "'+key+'" not known in dictionary';
       });
     this.registerSubCommand("dict", "set", function (interp, args) {
-	this.requireExactArgc(args, 4);
+	this.arity(args, 4);
 	var name  = args[1];
 	var dict  = interp.getVar(name);
 	var key   = args[2].toString();
@@ -250,7 +250,7 @@ function TclInterp () {
       });
       }*/
     this.registerCommand("eval",function (interp, args) {
-        this.requireMinArgc(args, 2);
+        this.arity(args, 2,Infinity);
         for (var i = 1; i < args.length; i++) args[i] = args[i].toString();
         if (args.length == 2) var code = args[1];
         else                  var code = args.slice(1).join(" ");
@@ -258,7 +258,7 @@ function TclInterp () {
       });
     /*
       this.registerCommand("exec",function (interp, args) {
-      this.requireMinArgc(args, 2);
+      this.arity(args, 2, Infinity);
       var exec = require('child_process').exec,
       child;
       puts("exec "+args.slice(1).join(" "));
@@ -275,7 +275,7 @@ function TclInterp () {
       });
     */
     this.registerCommand("exit",function (interp, args) {
-	this.requireMinArgc(args, 1);
+	this.arity(args, 1,2);
 	var rc = 0;
 	if (args.length == 2) rc = args[1];
 	process.exit(rc);
@@ -301,8 +301,14 @@ function TclInterp () {
       if(res == false) res = 0; else if(res == true) res = 1;
       return res;
     };
+    this.registerSubCommand("file", "dirname", function (interp, args) {
+        this.arity(args, 2);
+	var path = args[1].toString().split("/");
+	path.pop();
+	return path.join("/");
+      });
     this.registerCommand("for", function (interp, args) {
-        this.requireExactArgc(args, 5);
+        this.arity(args, 5);
         interp.eval(args[1].toString());
         if(interp.code != interp.OK) return;
         var cond = args[2].toString();
@@ -325,7 +331,7 @@ function TclInterp () {
         return "";
     });
     this.registerCommand("foreach", function (interp, args) {
-        this.requireExactArgc(args, 4);
+        this.arity(args, 4);
         var list = args[2].toList();
         var body = args[3].toString();
         var res    = "";
@@ -343,7 +349,7 @@ function TclInterp () {
         return "";
     });
     /*    this.registerCommand("gets", function (interp, args) {
-        this.requireArgcRange(args, 2, 3);
+        this.arity(args, 2, 3);
         var reply; // = prompt(args[1],"");
         process.stdin.resume();
         process.stdin.on('data', function(str) {
@@ -355,7 +361,7 @@ function TclInterp () {
         } else return reply;
         }); */
     this.registerCommand("if", function (interp, args) {
-        this.requireMinArgc(args, 3);
+        this.arity(args, 3, Infinity);
         var cond = args[1].toString();
         var test = interp.objectify(interp.expr(interp, cond));
         if (test.toBoolean()) return interp.eval(args[2].toString());
@@ -363,10 +369,10 @@ function TclInterp () {
         for (var i = 3; i < args.length; ) {
             switch (args[i].toString()) {
             case "else":
-                this.requireExactArgc(args, i + 2);
+                this.arity(args, i + 2);
                 return interp.eval(args[i+1].toString());
             case "elseif":
-                this.requireMinArgc(args, i + 3);
+                this.arity(args, i + 3);
                 test = interp.objectify(interp.expr(interp, args[i+1].toString()));
                 if (test.toBoolean())
                     return interp.eval(args[i+2].toString());
@@ -378,7 +384,7 @@ function TclInterp () {
         }
     });
     this.registerCommand("incr", function (interp, args) {
-        this.requireArgcRange(args, 2, 3);
+        this.arity(args, 2, 3);
         var name = args[1];
         if (args.length == 2) var incr = 1;
         else var incr = interp.objectify(args[2]).toInteger();
@@ -386,13 +392,13 @@ function TclInterp () {
         return interp.setVar(name, new TclObject(incr, "INTEGER"));
     });
     this.registerSubCommand("info", "args", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         var name = args[1].toString();
         if (!interp.procs[name]) throw '"'+name+'" isn\'t a procedure';
         return interp.getCommand(name).privdata[0];
     });
     this.registerSubCommand("info", "body", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         var name = args[1].toString();
         if (!interp.procs[name]) throw '"'+name+'" isn\'t a procedure';
         return interp.getCommand(name).privdata[1];
@@ -408,7 +414,7 @@ function TclInterp () {
         return interp.mkList(interp.callframe[0]);
     });
     this.registerSubCommand("info", "isensemble", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         var name = args[1].toString();
         return (interp.getCommand(name).ensemble != null);
     });
@@ -434,7 +440,7 @@ function TclInterp () {
         return interp.mkList(interp.callframe[interp.level]);
     });
     this.registerCommand("join", function (interp, args) {
-	this.requireArgcRange(args, 2, 3);
+	this.arity(args, 2, 3);
 	var lst = args[1].toList();
 	var sep = " ";
 	if(args.length == 3) sep = args[2].toString();
@@ -451,7 +457,7 @@ function TclInterp () {
         return eval(args[1].toString());
       });
     this.registerCommand("lappend", function (interp, args) {
-        this.requireMinArgc(args, 2);
+        this.arity(args, 2, Infinity);
         var vname = args[1].toString();
 	try {
 	  var list = interp.getVar(vname);
@@ -464,7 +470,7 @@ function TclInterp () {
         return list;
       });
     this.registerCommand("lindex", function (interp, args) {
-        this.requireMinArgc(args, 3);
+        this.arity(args, 3, Infinity);
         var list = interp.objectify(args[1]);
         for (var i = 2; i < args.length; i++) {
 	  try {
@@ -482,11 +488,11 @@ function TclInterp () {
 	return new TclObject(args);
       });
     this.registerCommand("llength", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         return args[1].toList().length;
       });
     this.registerCommand("lrange", function (interp, args) {
-        this.requireExactArgc(args, 4);
+        this.arity(args, 4);
         var list    = interp.objectify(args[1]);
         var start = list.listIndex(args[2]);
         var end     = list.listIndex(args[3])+1;
@@ -495,7 +501,7 @@ function TclInterp () {
         } catch (e) {return [];}
       });
     this.registerCommand("lset", function (interp, args) {
-        this.requireMinArgc(args, 4);
+        this.arity(args, 4, Infinity);
         var list = interp.getVar(args[1].toString());
         var elt = list;
         for (var i = 2; i < args.length-2; i++) {
@@ -508,27 +514,27 @@ function TclInterp () {
         return list;
       });
     this.registerCommand("lsearch", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
         var lst = args[1].toList();
         for(i in lst) if(lst[i] == args[2].toString()) return i;
         return -1;
       });
     this.registerCommand("lsort", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         return args[1].toList().sort();
       });
     this.registerCommand("pid", function (interp, args) {
 	return process.pid;
       });
     this.registerCommand("puts", function (interp, args) {
-	this.requireExactArgc(args, 2);
+	this.arity(args, 2);
 	puts(args[1].toString());
       });
     this.registerCommand("pwd", function (interp, args) {
 	return process.cwd();
       });
     this.registerCommand("proc", function (interp, args) {
-        this.requireExactArgc(args, 4);
+        this.arity(args, 4);
         var name = args[1].toString();
         var argl = interp.parseList(args[2]);
         var body = args[3].toString();
@@ -537,20 +543,20 @@ function TclInterp () {
         interp.procs[name]    = true;
       });
     this.registerCommand("regexp", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
         var re    = new RegExp(args[1].toString());
         var str = args[2].toString();
         return (str.search(re) > -1? "1":"0");
       });
     this.registerCommand("regsub", function (interp, args) {
-        this.requireExactArgc(args, 4);
+        this.arity(args, 4);
         var re    = new RegExp(args[1].toString());
         var str = args[2].toString();
         var trg = args[3].toString();
         return (str.replace(re,trg));
       });
     this.registerCommand("rename", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
 	var name    = args[1];
 	var newname = args[2];
 	interp.commands[newname] = interp.commands[name];
@@ -561,19 +567,19 @@ function TclInterp () {
         interp.commands[name] = null;
       });
     this.registerCommand("return", function (interp, args) {
-        this.requireArgcRange(args, 1, 2);
+        this.arity(args, 1, 2);
         var r = args[1];
         interp.code = interp.RET;
         return r;
     });
     this.registerCommand("set", function (interp, args) {
-        this.requireArgcRange(args, 2, 3);
+        this.arity(args, 2, 3);
         var name = args[1];
         if (args.length == 3) interp.setVar(name, args[2]);
         return interp.getVar(name);
     });
     this.registerCommand("source", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         interp.script = args[1].toString();
         try {
 	  var data = fs.readFileSync(interp.script).toString();
@@ -584,29 +590,36 @@ function TclInterp () {
 	return res;
       });
     this.registerCommand("split", function (interp, args) {
-        this.requireArgcRange(args, 2, 3);
+        this.arity(args, 2, 3);
         var str = args[1].toString();
         var sep = " ";
         if (args.length == 3) sep = args[2].toString();
-        return str.split(sep);
+	var res = [], e;
+        var tmp = str.split(sep);
+	for(i in tmp) {
+	  e = tmp[i];
+	  if(e == "") e = "{}";
+	  res.push(e);
+	}
+	return res.join(" ");
       });
     this.registerSubCommand("string", "equal", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
         return (args[1].toString() == args[2].toString())? "1": "0";
       });
     this.registerSubCommand("string", "index", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
         var s = args[1].toString();
         try {
 	  return s.charAt(args[1].stringIndex(args[2]));
         } catch (e) {return "";}
       });
     this.registerSubCommand("string", "length", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         return args[1].toString().length;
       });
     this.registerSubCommand("string", "range", function (interp, args) {
-        this.requireExactArgc(args, 4);
+        this.arity(args, 4);
         var s = args[1];
         try {
             var b = s.stringIndex(args[2]);
@@ -616,15 +629,15 @@ function TclInterp () {
         } catch (e) {return "";}
     });
     this.registerSubCommand("string", "tolower", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         return args[1].toString().toLowerCase();
     });
     this.registerSubCommand("string", "toupper", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         return args[1].toString().toUpperCase();
     });
     this.registerSubCommand("string", "trim", function (interp, args) {
-        this.requireExactArgc(args, 2);
+        this.arity(args, 2);
         return args[1].toString().trim();
     });
     function sec_msec () {
@@ -632,7 +645,7 @@ function TclInterp () {
         return t.getSeconds()*1000 + t.getMilliseconds();
     }
     this.registerCommand("time", function (interp, args) {
-        this.requireArgcRange(args, 2, 3);
+        this.arity(args, 2, 3);
         var body = args[1].toString();
         var n    = (args.length == 3)? args[2] : 1;
         var t0   = sec_msec();
@@ -640,12 +653,12 @@ function TclInterp () {
         return (sec_msec()-t0)*1000/n + " microseconds per iteration";
     });
     this.registerCommand("unset", function (interp, args) {
-        this.requireMinArgc(args, 2);
+        this.arity(args, 2, Infinity);
         for (var i = 2; i < args.length; i++)
             interp.setVar(args[i], null);
     });
     this.registerCommand("uplevel",function (interp, args) {
-        this.requireMinArgc(args, 3);
+        this.arity(args, 3, Infinity);
         var delta = args[1].toInteger();
         interp.level -= delta;
 	if(interp.level < 0) {
@@ -661,7 +674,7 @@ function TclInterp () {
         return res;
       });
     this.registerCommand("while", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
         var cond = args[1].toString();
         var body = args[2].toString();
         var res  = "";
@@ -681,7 +694,7 @@ function TclInterp () {
       });
     // native cmdname {function(interp, args) {...}}
     this.registerCommand("native", function (interp, args) {
-        this.requireExactArgc(args, 3);
+        this.arity(args, 3);
         var cmd = args[1].toList();
         var func = eval(args[2].toString());
         //alert("in: "+args[2].toString()+", func: "+ func);
@@ -711,7 +724,7 @@ function TclInterp () {
     var ops = ["+","-","*","/","%","<",">","==","!="];
     for (i in ops)
       this.registerCommand(ops[i],function (interp, args) {
-	  this.requireExactArgc(args, 3);
+	  this.arity(args, 3);
 	  var name = args[0].toString();
 	  var a    = interp.objectify(args[1]);
 	  var b    = interp.objectify(args[2]);
@@ -1000,279 +1013,270 @@ function TclObject(text) {
     }
 }
 function TclCommand(func, privdata) {
-    if (func == null) throw "No such function";
-    this.func = func;
-    this.privdata = privdata;
-    this.ensemble = arguments[2];
-
-    this.call = function(interp, args) {
-        var r = (this.func)(interp, args);
-        r = interp.objectify(r);
-        return r;
+  if (func == null) throw "No such function";
+  this.func     = func;
+  this.privdata = privdata;
+  this.ensemble = arguments[2];
+  
+  this.call = function(interp, args) {
+    var r = (this.func)(interp, args);
+    r = interp.objectify(r);
+    return r;
+  }
+  this.arity = function (args, min, max) {
+    if(max == undefined) max = min;
+    if (args.length < min || args.length > max) {
+      throw min + ".."+max + " words expected, got "+args.length;
     }
-    this.requireExactArgc = function (args, argc) {
-        if (args.length != argc) {
-            throw argc + " words expected, got "+args.length;
-        }
-    }
-    this.requireMinArgc = function (args, argc) {
-        if (args.length < argc) {
-            throw argc + " words expected at least, got "+args.length;
-        }
-    }
-    this.requireArgcRange = function (args, min, max) {
-        if (args.length < min || args.length > max) {
-            throw min + " to "+max + " words expected, got "+args.length;
-        }
-    }
+  } 
 }
 function TclParser(text) {
-    this.OK    = 0;
-    this.SEP = 0;
-    this.STR = 1;
-    this.EOL = 2;
-    this.EOF = 3;
-    this.ESC = 4;
-    this.CMD = 5;
-    this.VAR = 6;
-    this.text    = text;
-    this.start = 0;
-    this.end     = 0;
-    this.insidequote = false;
-    this.index = 0;
-    this.len = text.length;
+  this.OK  = 0;
+  this.SEP = 0;
+  this.STR = 1;
+  this.EOL = 2;
+  this.EOF = 3;
+  this.ESC = 4;
+  this.CMD = 5;
+  this.VAR = 6;
+  this.text  = text;
+  this.start = 0;
+  this.end   = 0;
+  this.insidequote = false;
+  this.index = 0;
+  this.len = text.length;
+  this.type = this.EOL;
+  this.cur = this.text.charAt(0);
+  this.getText = function () {
+    return this.text.substring(this.start,this.end+1);
+  }
+  this.parseString = function () {
+    var newword = (this.type==this.SEP ||
+		   this.type == this.EOL || this.type == this.STR);
+    if (newword && this.cur == "{") return this.parseBrace();
+    else if (newword && this.cur == '"') {
+      this.insidequote = true;
+      this.feedchar();
+    }
+    this.start = this.index;
+    while (true) {
+      if (this.len == 0) {
+	this.end = this.index-1;
+	this.type = this.ESC;
+	return this.OK;
+      }
+      if (this.cur == "\\") {
+	if (this.len >= 2) this.feedSequence();
+      }
+      else if ("$[ \t\n\r;".indexOf(this.cur)>=0) {
+	if ("$[".indexOf(this.cur)>=0 || !this.insidequote) {
+	  this.end = this.index-1;
+	  this.type = this.ESC;
+	  return this.OK;
+	}
+      }
+      else if (this.cur == '"' && this.insidequote) {
+	this.end    = this.index-1;
+	this.type = this.ESC;
+	this.feedchar();
+	this.insidequote = false;
+	return this.OK;
+      }
+      this.feedchar();
+    }
+    return this.OK;
+  }
+  this.parseList = function () {
+    level = 0;
+    this.start = this.index;
+    while (true) {
+      if (this.len == 0) {
+	this.end = this.index;
+	this.type = this.EOL;
+	return;
+      }
+      switch (this.cur) {
+      case "\\":
+	if (this.len >= 2) this.feedSequence();
+	break;
+      case " ": case "\t": case "\n": case "\r":
+	if (level > 0) break;
+	this.end    = this.index - 1;
+	this.type = this.SEP;
+	this.feedchar();
+	return;
+      case '{': level++; break;
+      case '}': level--; break;
+      }
+      this.feedchar();
+    }
+    if (level != 0) throw "Not a list";
+    this.end = this.index;
+    return;
+  }
+  this.parseSep = function () {
+    this.start = this.index;
+    while (" \t\r\n".indexOf(this.cur)>=0) this.feedchar();
+    this.end    = this.index - 1;
+    this.type = this.SEP;
+    return this.OK;
+  }
+  this.parseEol = function () {
+    this.start = this.index;
+    while(" \t\n\r;".indexOf(this.cur)>=0) this.feedchar();
+    this.end    = this.index - 1;
     this.type = this.EOL;
-    this.cur = this.text.charAt(0);
-    this.getText = function () {
-        return this.text.substring(this.start,this.end+1);
+    return this.OK;
+  }
+  this.parseCommand = function () {
+    var level = 1;
+    var blevel = 0;
+    this.feedcharstart();
+    while (true) {
+      if (this.len == 0) break;
+      if (this.cur == "[" && blevel == 0)
+	level++;
+      else if (this.cur == "]" && blevel == 0) {
+	level--;
+	if (level == 0) break;
+      } else if (this.cur == "\\") {
+	this.feedSequence();
+      } else if (this.cur == "{") {
+	blevel++;
+      } else if (this.cur == "}") {
+	if (blevel != 0) blevel--;
+      }
+      this.feedchar();
     }
-    this.parseString = function () {
-        var newword = (this.type==this.SEP ||
-                                     this.type == this.EOL || this.type == this.STR);
-        if (newword && this.cur == "{") return this.parseBrace();
-        else if (newword && this.cur == '"') {
-            this.insidequote = true;
-            this.feedchar();
-        }
-        this.start = this.index;
-        while (true) {
-            if (this.len == 0) {
-                this.end = this.index-1;
-                this.type = this.ESC;
-                return this.OK;
-            }
-            if (this.cur == "\\") {
-                if (this.len >= 2) this.feedSequence();
-            }
-            else if ("$[ \t\n\r;".indexOf(this.cur)>=0) {
-                if ("$[".indexOf(this.cur)>=0 || !this.insidequote) {
-                    this.end = this.index-1;
-                    this.type = this.ESC;
-                    return this.OK;
-                }
-            }
-            else if (this.cur == '"' && this.insidequote) {
-                this.end    = this.index-1;
-                this.type = this.ESC;
-                this.feedchar();
-                this.insidequote = false;
-                return this.OK;
-            }
-            this.feedchar();
-        }
-        return this.OK;
+    this.end    = this.index-1;
+    this.type = this.CMD;
+    if (this.cur == "]") this.feedchar();
+    return this.OK;
+  }
+  this.parseVar = function () {
+    this.feedcharstart();
+    this.end = this.index
+    + this.text.substring(this.index).match(Tcl.getVar).toString().length-1;
+    if (this.end == this.index-1) {
+      this.end = --this.index;
+      this.type = this.STR;
+    } else this.type = this.VAR;
+    this.setPos(this.end+1);
+    return this.OK;
+  }
+  this.parseBrace = function () {
+    var level = 1;
+    this.feedcharstart();
+    while (true) {
+      if (this.len > 1 && this.cur == "\\") {
+	this.feedSequence();
+      } else if (this.len == 0 || this.cur == "}") {
+	level--;
+	if (level == 0 || this.len == 0) {
+	  this.end = this.index-1;
+	  if (this.len > 0) this.feedchar();
+	  this.type = this.STR;
+	  return this.OK;
+	}
+      } else if (this.cur == "{") level++;
+      this.feedchar();
     }
-    this.parseList = function () {
-        level = 0;
-        this.start = this.index;
-        while (true) {
-            if (this.len == 0) {
-                this.end = this.index;
-                this.type = this.EOL;
-                return;
-            }
-            switch (this.cur) {
-            case "\\":
-                if (this.len >= 2) this.feedSequence();
-                break;
-            case " ": case "\t": case "\n": case "\r":
-                if (level > 0) break;
-                this.end    = this.index - 1;
-                this.type = this.SEP;
-                this.feedchar();
-                return;
-            case '{': level++; break;
-            case '}': level--; break;
-            }
-            this.feedchar();
-        }
-        if (level != 0) throw "Not a list";
-        this.end = this.index;
-        return;
+    return this.OK; // unreached
+  }
+  this.parseComment = function () {
+    while (this.cur != "\n" && this.cur != "\r") this.feedchar();
+  }
+  this.getToken = function () {
+    while (true) {
+      if (this.len == 0) {
+	if (this.type == this.EOL) this.type = this.EOF;
+	if (this.type != this.EOF) this.type = this.EOL;
+	return this.OK;
+      }
+      switch (this.cur) {
+      case ' ':
+      case '\t':
+      if (this.insidequote) return this.parseString();
+      return this.parseSep();
+      case '\n':
+      case '\r':
+      case ';':
+      if (this.insidequote) return this.parseString();
+      return this.parseEol();
+      case '[': return this.parseCommand();
+      case '$': return this.parseVar();
+      }
+      if (this.cur == "#" && this.type == this.EOL) {
+	this.parseComment();
+	continue;
+      }
+      return this.parseString();
     }
-    this.parseSep = function () {
-        this.start = this.index;
-        while (" \t\r\n".indexOf(this.cur)>=0) this.feedchar();
-        this.end    = this.index - 1;
-        this.type = this.SEP;
-        return this.OK;
+    return this.OK; // unreached
+  }
+  this.feedSequence = function () {
+    if (this.cur != "\\") throw "Invalid escape sequence";
+    var cur = this.steal(1);
+    var specials = {};
+    specials.a = "\a";
+    specials.b = "\b";
+    specials.f = "\f";
+    specials.n = "\n";
+    specials.r = "\r";
+    specials.t = "\t";
+    specials.v = "\v";
+    switch (cur) {
+    case 'u':
+      var hex = this.steal(4);
+      if (hex != Tcl.isHexSeq.exec(hex))
+	throw "Invalid unicode escape sequence: "+hex;
+      cur = String.fromCharCode(parseInt(hex,16));
+      break;
+    case 'x':
+      var hex = this.steal(2);
+      if (hex != Tcl.isHexSeq.exec(hex))
+	throw "Invalid unicode escape sequence: "+hex;
+      cur = String.fromCharCode(parseInt(hex,16));
+      break;
+    case "a": case "b": case "f": case "n":
+    case "r": case "t": case "v":
+      cur = specials[cur];
+      break;
+    default:
+      if ("0123456789".indexOf(cur) >= 0) {
+	cur = cur + this.steal(2);
+	if (cur != Tcl.isOctalSeq.exec(cur))
+	  throw "Invalid octal escape sequence: "+cur;
+	cur = String.fromCharCode(parseInt(cur, 8));
+      }
+      break;
     }
-    this.parseEol = function () {
-        this.start = this.index;
-        while(" \t\n\r;".indexOf(this.cur)>=0) this.feedchar();
-        this.end    = this.index - 1;
-        this.type = this.EOL;
-        return this.OK;
-    }
-    this.parseCommand = function () {
-        var level = 1;
-        var blevel = 0;
-        this.feedcharstart();
-        while (true) {
-            if (this.len == 0) break;
-            if (this.cur == "[" && blevel == 0)
-                level++;
-            else if (this.cur == "]" && blevel == 0) {
-                level--;
-                if (level == 0) break;
-            } else if (this.cur == "\\") {
-                this.feedSequence();
-            } else if (this.cur == "{") {
-                blevel++;
-            } else if (this.cur == "}") {
-                if (blevel != 0) blevel--;
-            }
-            this.feedchar();
-        }
-        this.end    = this.index-1;
-        this.type = this.CMD;
-        if (this.cur == "]") this.feedchar();
-        return this.OK;
-    }
-    this.parseVar = function () {
-        this.feedcharstart();
-        this.end = this.index
-        + this.text.substring(this.index).match(Tcl.getVar).toString().length-1;
-        if (this.end == this.index-1) {
-            this.end = --this.index;
-            this.type = this.STR;
-        } else this.type = this.VAR;
-        this.setPos(this.end+1);
-        return this.OK;
-    }
-    this.parseBrace = function () {
-        var level = 1;
-        this.feedcharstart();
-        while (true) {
-            if (this.len > 1 && this.cur == "\\") {
-                this.feedSequence();
-            } else if (this.len == 0 || this.cur == "}") {
-                level--;
-                if (level == 0 || this.len == 0) {
-                    this.end = this.index-1;
-                    if (this.len > 0) this.feedchar();
-                    this.type = this.STR;
-                    return this.OK;
-                }
-            } else if (this.cur == "{") level++;
-            this.feedchar();
-        }
-        return this.OK; // unreached
-    }
-    this.parseComment = function () {
-        while (this.cur != "\n" && this.cur != "\r") this.feedchar();
-    }
-    this.getToken = function () {
-        while (true) {
-            if (this.len == 0) {
-                if (this.type == this.EOL) this.type = this.EOF;
-                if (this.type != this.EOF) this.type = this.EOL;
-                return this.OK;
-            }
-            switch (this.cur) {
-                case ' ':
-                case '\t':
-                if (this.insidequote) return this.parseString();
-                return this.parseSep();
-                case '\n':
-                case '\r':
-                case ';':
-                if (this.insidequote) return this.parseString();
-                return this.parseEol();
-                case '[': return this.parseCommand();
-                case '$': return this.parseVar();
-            }
-            if (this.cur == "#" && this.type == this.EOL) {
-                this.parseComment();
-                continue;
-            }
-            return this.parseString();
-        }
-        return this.OK; // unreached
-    }
-    this.feedSequence = function () {
-        if (this.cur != "\\") throw "Invalid escape sequence";
-        var cur = this.steal(1);
-        var specials = {};
-        specials.a = "\a";
-        specials.b = "\b";
-        specials.f = "\f";
-        specials.n = "\n";
-        specials.r = "\r";
-        specials.t = "\t";
-        specials.v = "\v";
-        switch (cur) {
-        case 'u':
-            var hex = this.steal(4);
-            if (hex != Tcl.isHexSeq.exec(hex))
-                throw "Invalid unicode escape sequence: "+hex;
-            cur = String.fromCharCode(parseInt(hex,16));
-            break;
-        case 'x':
-            var hex = this.steal(2);
-            if (hex != Tcl.isHexSeq.exec(hex))
-                throw "Invalid unicode escape sequence: "+hex;
-            cur = String.fromCharCode(parseInt(hex,16));
-            break;
-        case "a": case "b": case "f": case "n":
-        case "r": case "t": case "v":
-            cur = specials[cur];
-            break;
-        default:
-            if ("0123456789".indexOf(cur) >= 0) {
-                cur = cur + this.steal(2);
-                if (cur != Tcl.isOctalSeq.exec(cur))
-                    throw "Invalid octal escape sequence: "+cur;
-                cur = String.fromCharCode(parseInt(cur, 8));
-            }
-            break;
-        }
-        this.text[index] = cur;
-        this.feedchar();
-    }
-    this.steal = function (n) {
-        var tail = this.text.substring(this.index+1);
-        var word = tail.substr(0, n);
-        this.text = this.text.substring(0, this.index-1) + tail.substring(n);
-        return word;
-    }
-    this.feedcharstart = function () {
-        this.feedchar();
-        this.start = this.index;
-    }
-    this.setPos = function (index) {
-        var d = index-this.index;
-        this.index = index;
-        this.len -= d;
-        this.cur = this.text.charAt(this.index);
-    }
-    this.feedchar = function () {
-        this.index++;
-        this.len--;
-        if (this.len < 0)
-            throw "End of file reached";
-        this.cur = this.text.charAt(this.index);
-    }
+    this.text[index] = cur;
+    this.feedchar();
+  }
+  this.steal = function (n) {
+    var tail = this.text.substring(this.index+1);
+    var word = tail.substr(0, n);
+    this.text = this.text.substring(0, this.index-1) + tail.substring(n);
+    return word;
+  }
+  this.feedcharstart = function () {
+    this.feedchar();
+    this.start = this.index;
+  }
+  this.setPos = function (index) {
+    var d = index-this.index;
+    this.index = index;
+    this.len -= d;
+    this.cur = this.text.charAt(this.index);
+  }
+  this.feedchar = function () {
+    this.index++;
+    this.len--;
+    if (this.len < 0)
+      throw "End of file reached";
+    this.cur = this.text.charAt(this.index);
+  }
 }
 //------------------------------------- main Read-Eval-Print loop
 var itp = new TclInterp();
