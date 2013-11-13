@@ -41,7 +41,7 @@ e.g. {dict get $d b} -> 2
 e.g. {dict set d b 5} -> {a 1 b 5 c 3}
 e.g. {dict set d x 7} -> {a 1 b 5 c 3 x 7}
 
-e.g. {set home [pwd]; list} -> {}
+e.g. {set home [file dirname [pwd]]; list} -> {}
 e.g. {string equal [set env(HOME)] $home}   -> 1
 e.g. {string equal [set ::env(HOME)] $home} -> 1
 
@@ -94,10 +94,13 @@ e.g. {regexp {X[ABC]Y} XDY}    -> 0
 e.g. {regsub {[A-C]+} uBAAD x} -> uxD 
 
 e.g. {split "a b  c d"}     -> {a b {} c d}
+e.g. {split " a b  c d"}     -> {{} a b {} c d}
+e.g. {split "a b  c d "}     -> {a b {} c d {}}
 e.g. {split usr/local/bin /} -> {usr local bin}
 
 e.g. {string equal foo foo}   -> 1
 e.g. {string equal foo bar}   -> 0
+e.g. {string index abcde 2}   -> c
 e.g. {string length ""}       -> 0
 e.g. {string length foo}      -> 3
 e.g. {string range hello 1 3} -> ell
@@ -117,10 +120,10 @@ e.g. {lsearch $x y}  -> -1
 e.g. {lsort {z x y}} -> {x y z}
 
 e.g. {proc f x {set y 0; info vars}} -> ""
-e.g. {f 41} -> {x y} ;# must fix magic "_" variable before
+e.g. {f 41} -> {x y} ;# must fix proc call in uplevel issue
 set tmp [f 41]; e.g. {set tmp} -> {x y}
 e.g. {info args f} -> x
 e.g. {info body f} -> {set y 0; info vars}
-#e.g. {f 42} -> {x y} ;# must fix magic "_" variable before
+#e.g. {f 42} -> {x y} ;# must fix proc call in uplevel issue
 
 puts "total $total tests, passed $passed, failed $fail"
