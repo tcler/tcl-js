@@ -78,7 +78,6 @@ function TclInterp () {
       var cmd = this.commands[name];
       if (cmd == null) {
 	ens = {};
-	// ens["subcommands"]  = new TclCommand(Tcl.InfoSubcommands, null);
 	this.commands[name] = new TclCommand(Tcl.EnsembleCommand, null, ens);
       }
       ens = this.commands[name].ensemble;
@@ -91,7 +90,6 @@ function TclInterp () {
 	  cmd = new TclCommand(Tcl.EnsembleCommand, null, {});
 	  ens[name] = cmd;
 	  ens = cmd.ensemble;
-	  // ens["subcommands"] = new TclCommand(Tcl.InfoSubcommands, null);
 	}
       }
       ens[subcmd] = new TclCommand(func, privdata);
@@ -500,6 +498,10 @@ function TclInterp () {
 	  return list.content.slice(start, end);
         } catch (e) {return [];}
       });
+    this.registerCommand("lreverse", function (interp, args) {
+        this.arity(args, 2);
+        return args[1].toList().reverse();
+      });
     this.registerCommand("lset", function (interp, args) {
         this.arity(args, 4, Infinity);
         var list = interp.getVar(args[1].toString());
@@ -602,6 +604,12 @@ function TclInterp () {
 	  res.push(e);
 	}
 	return res.join(" ");
+      });
+    this.registerSubCommand("string", "compare", function (interp, args) {
+        this.arity(args, 3);
+	var a = args[1].toString();
+	var b = args[2].toString();
+	return a > b? "1": a < b? "-1": "0";
       });
     this.registerSubCommand("string", "equal", function (interp, args) {
         this.arity(args, 3);
@@ -863,14 +871,6 @@ Tcl.EnsembleCommand = function (interp, args) {
     }
     return ens[sub].call(interp, args);
 }
-/** Get subcommands of the current ensemble command. */
-/*
-Tcl.InfoSubcommands = function(interp, args) {
-    var r = [];
-    for (var i in this.ensemble) r.push(i);
-    return interp.objectify(r);
-}
-*/
 function TclObject(text) {
     this.TEXT    = 0;
     this.LIST    = 1;
@@ -922,94 +922,92 @@ function TclObject(text) {
         return res.join(" ");
     }
     this.toString = function () {
-        if (this.type != this.TEXT) {
-            if (this.type == this.LIST)
-                this.content = this.getString(this.content);
-            else this.content = this.content.toString();
-            this.type = this.TEXT;
-        }
-        return this.content;
+      if (this.type != this.TEXT) {
+	if (this.type == this.LIST)
+	  this.content = this.getString(this.content);
+	else this.content = this.content.toString();
+	this.type = this.TEXT;
+      }
+      return this.content;
     }
     this.toList = function () {
-        if (this.type != this.LIST) {
-            if (this.type != this.TEXT)
-                this.content[0] = this.content;
-            else {
-
-                var text = this.content;
-                if (text.charAt(0) == "{" && text.charAt(text.length-1) == "}")
-                    text = text.substring(1, text.length-1);
-                if (text == "")
-                    return [];
-
-                var parser = new TclParser(text.toString());
-                this.content = [];
-                for(;;) {
-                    parser.parseList();
-                    this.content.push(new TclObject(parser.getText()));
-                    if (parser.type == parser.EOL || parser.type == parser.ESC)
-                        break;
-                }
-            }
-
-            this.type = this.LIST;
-        }
-        return this.content;
+      if (this.type != this.LIST) {
+	if (this.type != this.TEXT)
+	  this.content[0] = this.content;
+	else {
+	  var text = this.content;
+	  if (text.charAt(0) == "{" && text.charAt(text.length-1) == "}")
+	    text = text.substring(1, text.length-1);
+	  if (text == "")
+	    return [];
+	  
+	  var parser = new TclParser(text.toString());
+	  this.content = [];
+	  for(;;) {
+	    parser.parseList();
+	    this.content.push(new TclObject(parser.getText()));
+	    if (parser.type == parser.EOL || parser.type == parser.ESC)
+	      break;
+	  }
+	}	
+	this.type = this.LIST;
+      }
+      return this.content;
     }
     this.toInteger = function () {
-        if (this.type == this.INTEGER) return this.content;
-        this.toString();
-        if (this.content.match(Tcl.isHex))
-            this.content = parseInt(this.content.substring(2), 16);
-        else if (this.content.match(Tcl.isOctal))
-            this.content = parseInt(this.content, 8);
-        else if (this.content.match(Tcl.isDecimal))
-            this.content = parseInt(this.content);
-        else throw "Not an integer: '"+this.content+"'";
-        if (isNaN(this.content)) throw "Not an integer: '"+this.content+"'";
-        this.type = this.INTEGER;
-        return this.content;
+      if (this.type == this.INTEGER) return this.content;
+      this.toString();
+      if (this.content.match(Tcl.isHex))
+	this.content = parseInt(this.content.substring(2), 16);
+      else if (this.content.match(Tcl.isOctal))
+	this.content = parseInt(this.content, 8);
+      else if (this.content.match(Tcl.isDecimal))
+	this.content = parseInt(this.content);
+      else throw "Not an integer: '"+this.content+"'";
+      if (isNaN(this.content)) throw "Not an integer: '"+this.content+"'";
+      this.type = this.INTEGER;
+      return this.content;
     }
     this.getFloat = function (text) {
-        if (!text.toString().match(Tcl.isReal))
+      if (!text.toString().match(Tcl.isReal))
         throw "Not a real: '"+text+"'";
-        return parseFloat(text);
+      return parseFloat(text);
     }
     this.toReal = function () {
-        if (this.type == this.REAL)
+      if (this.type == this.REAL)
         return this.content;
-        this.toString();
-        // parseFloat doesn't control all the string, so need to check it
-        this.content = this.getFloat(this.content);
-        if (isNaN(this.content)) throw "Not a real: '"+this.content+"'";
-        this.type = this.REAL;
-        return this.content;
+      this.toString();
+      // parseFloat doesn't control all the string, so need to check it
+      this.content = this.getFloat(this.content);
+      if (isNaN(this.content)) throw "Not a real: '"+this.content+"'";
+      this.type = this.REAL;
+      return this.content;
     }
     this.getNumber = function () {
-        try {
-            return this.toInteger();
-        } catch (e) {return this.toReal();}
+      try {
+	return this.toInteger();
+      } catch (e) {return this.toReal();}
     }
     this.toBoolean = function () {
-        if (this.type == this.BOOL) return this.content;
-        try {
-            this.content = (this.toInteger() != 0);
-        } catch (e) {
-            var t = this.content;
-            if (t instanceof Boolean) return t;
-            switch (t.toString().toLowerCase()) {
-            case "yes":case "true":case "on":
-                this.content = true;
-                break;
-            case "false":case "off":case "no":
-                this.content = false;
-                break;
-            default:
-                throw "Boolean expected, got: '"+this.content+"'";
-            }
-        }
-        this.type = this.BOOL;
-        return this.content;
+      if (this.type == this.BOOL) return this.content;
+      try {
+	this.content = (this.toInteger() != 0);
+      } catch (e) {
+	var t = this.content;
+	if (t instanceof Boolean) return t;
+	switch (t.toString().toLowerCase()) {
+	case "yes": case "true": case "on":
+	  this.content = true;
+	  break;
+	case "false": case "off": case "no":
+	  this.content = false;
+	  break;
+	default:
+	  throw "Boolean expected, got: '"+this.content+"'";
+	}
+      }
+      this.type = this.BOOL;
+      return this.content;
     }
 }
 function TclCommand(func, privdata) {
@@ -1091,7 +1089,7 @@ function TclParser(text) {
     this.start = this.index;
     while (true) {
       if (this.len == 0) {
-	this.end = this.index;
+	this.end  = this.index;
 	this.type = this.EOL;
 	return;
       }
@@ -1101,7 +1099,7 @@ function TclParser(text) {
 	break;
       case " ": case "\t": case "\n": case "\r":
 	if (level > 0) break;
-	this.end    = this.index - 1;
+	this.end  = this.index - 1;
 	this.type = this.SEP;
 	this.feedchar();
 	return;
@@ -1215,8 +1213,10 @@ function TclParser(text) {
     return this.OK; // unreached
   }
   this.feedSequence = function () {
+    //return;
     if (this.cur != "\\") throw "Invalid escape sequence";
     var cur = this.steal(1);
+    //puts("enter feedSequence, text: "+this.text+" cur: "+cur);
     var specials = {};
     specials.a = "\a";
     specials.b = "\b";
@@ -1234,9 +1234,11 @@ function TclParser(text) {
       break;
     case 'x':
       var hex = this.steal(2);
+      //puts("enter case x, hex: "+hex);
       if (hex != Tcl.isHexSeq.exec(hex))
 	throw "Invalid unicode escape sequence: "+hex;
       cur = String.fromCharCode(parseInt(hex,16));
+      //puts("hex: "+hex.toString()+" cur: "+cur);
       break;
     case "a": case "b": case "f": case "n":
     case "r": case "t": case "v":
