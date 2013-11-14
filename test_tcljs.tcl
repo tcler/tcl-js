@@ -11,12 +11,11 @@ puts "------------------------ [info script]"
 
 proc e.g. {cmd -> expected} {
     incr ::total
+    incr ::fail ;# to also count exceptions
     set mres [uplevel 1 $cmd]
-#puts mres:$mres
     if [!= $mres $expected] {
 	puts "**** $cmd -> $mres, expected $expected"
-	incr ::fail
-    } else {incr ::passed}
+    } else {incr ::passed; incr ::fail -1}
 }
 #------------------------------- commands not in real Tcl
 if [info exists auto_path] {
