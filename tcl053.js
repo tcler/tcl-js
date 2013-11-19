@@ -9,9 +9,10 @@
  * Richard Suchenwirth 2007, 2013: cleanup, additions
  * vim: syntax=javascript autoindent softtabwidth=4
  */
-_step = 0; // set to 1 for debugging
+// 'use strict'; // breaks some tests, like expr 0376, for loop
+var _step = 0; // set to 1 for debugging
 var fs = require('fs');
-puts = console.log;
+var puts = console.log;
 
 function TclInterp () {
     this.patchlevel = "0.5.3";
@@ -27,7 +28,7 @@ function TclInterp () {
     this.CNT = 3;
     this.getVar = function(name) {
         var nm = name.toString();
-        if (nm.match("^::env[(]")) nm=nm.substr(2);
+        if (nm.match("^::env[(]")) nm = nm.substr(2);
         if (nm.match("^env[(]")) {
             var key = nm.substr(4,nm.length-5);
             var val = process.env[key];
@@ -52,14 +53,15 @@ function TclInterp () {
     this.setVar("errorInfo", "");
 
     this.incrLevel = function() {
-        this.callframe[++this.level] = {};
-        return this.level;
+      //puts("going down from ("+this.level+"): "+this.levelcall);
+      this.callframe[++this.level] = {};
+      return this.level;
     }
     this.decrLevel = function() {
-        this.callframe[this.level] = null;
-        this.level--;
-        if (this.level<0) throw "Exit application";
-        this.result = null;
+      this.callframe[this.level] = null;
+      this.level--;
+      if (this.level < 0) throw "Exit application";
+      this.result = null;
     }
     this.getCommand = function(name) {
         try {
@@ -69,7 +71,7 @@ function TclInterp () {
     this.registerCommand = function(name, func, privdata) {
         if (func == null) throw "No such function: "+name;
         this.commands[name] = new TclCommand(func, privdata);
-    }
+     }
     this.registerSubCommand = function(name, subcmd, func, privdata) {
       if (func == null) throw "No such subcommand: "+ name +" " + subcmd;
       var path = name.split(" ");
@@ -129,6 +131,7 @@ function TclInterp () {
 	  } catch (e) {throw (e + "\nwhile parsing \"" + text + "\"");}
 	} else if (parser.type == (parser.ESC)) {
 	  // escape handling missing!
+	  // puts("escape handler called");
 	} else if (parser.type == (parser.SEP)) {
 	  prevtype = parser.type;
 	  continue;
@@ -140,8 +143,18 @@ function TclInterp () {
 	    try {
 	      result = this.call(args);
 	    } catch(e) {
-	      if(e.toString().match("Cannot call method")) 
-		throw 'invalid command name "'+args[0].toString()+'"';
+	      if(_step) puts("level: "+this.level+" args: "+args+" exception: "+e);
+	      var cmd = this.getCommand(args[0]);
+	      if (cmd == null) {
+		if(args.length==1 && (args[0].toString().match(/ /))) {
+		  throw e;
+		}
+		throw 'invalid command name "'+args[0]+'"';
+	      }
+	      if (cmd.ensemble != null) {
+		throw 'wrong # args: should be "'+args[0]
+		  +' subcommand ?argument ...?"';
+	      }
 	      throw e;
 	    }
 	    if (this.code != this.OK) return this.objectify(result);
@@ -197,15 +210,32 @@ function TclInterp () {
     this.registerSubCommand("clock", "seconds", function (interp, args) {
 	return Math.floor((new Date()).valueOf()/1000);
       });
-    
+    this.registerCommand("concat", function (interp, args) {
+        this.arity(args, 1, Infinity);
+	var res = [];
+	for(var i = 1; i < args.length; i++) {
+	  res = res.concat(args[i].toList());
+	}
+	return res;
+      });
     this.registerSubCommand("dict", "create", function (interp, args) {
 	if(args.length % 2 == 0) 
 	  throw 'wrong # args: should be "dict create ?key value ...?"';
 	return new TclObject(args.slice(1));
       });
+    this.registerSubCommand("dict", "exists", function (interp, args) {
+	if(args.length < 2) 
+	  throw 'wrong # args: should be "dict exists dictionary ?key ...?"';
+	var dict = args[1].toList();
+	var key  = args[2].toString();
+	for (var i=0;i < dict.length;i+=2) {
+	  if(dict[i].toString() == key) return 1;
+	}
+	return 0;
+      });
     this.registerSubCommand("dict", "get", function (interp, args) {
 	if(args.length < 2) 
-	  throw 'wrong # args: should be "dict get ?key ...?"';
+	  throw 'wrong # args: should be "dict get dictionary ?key ...?"';
 	var dict = args[1].toList();
 	var key  = args[2].toString();
 	for (var i=0;i < dict.length;i+=2) {
@@ -213,15 +243,28 @@ function TclInterp () {
 	}
 	throw 'key "'+key+'" not known in dictionary';
       });
+    this.registerSubCommand("dict", "keys", function (interp, args) {
+	if(args.length < 2 || args.length > 3) 
+	  throw 'wrong # args: should be "dict keys dictionary ?globPattern?"';
+	var dict    = args[1].toList();
+	var pattern = ".*";
+	if(args.length == 3) pattern = "^"+args[2].toString().replace(/\*/g,".*");
+	var res  = [];
+	for (var i=0;i < dict.length;i+=2) {
+	  if(dict[i].toString().match(pattern)) res.push(dict[i]);
+	}
+	return res;
+      });
     this.registerSubCommand("dict", "set", function (interp, args) {
 	this.arity(args, 4);
 	var name  = args[1];
-	var dict  = interp.getVar(name);
 	var key   = args[2].toString();
 	var val   = args[3].toString();
+	var dict  = [];
+	try {dict = interp.getVar(name);} catch(e) {dict = new TclObject([])};
 	var found = false;
 	var list  = dict.toList();
-	for (var i=0;i < list.length;i+=2) {
+	for (var i = 0; i < list.length; i += 2) {
 	  if(list[i].toString() == key) {
 	    list[i+1] = val;
 	    found = true;
@@ -233,6 +276,27 @@ function TclInterp () {
 	  list.push(interp.objectify(val));
 	} 
 	interp.setVar(name, dict);
+	return dict;
+      });
+    this.registerSubCommand("dict", "unset", function (interp, args) {
+	this.arity(args, 3);
+	var name  = args[1];
+	var key   = args[2].toString();
+	var dict  = [];
+	try {dict = interp.getVar(name);} catch(e) {dict = new TclObject([])};
+	var found = false;
+	var list  = dict.toList();
+	for (var i = 0; i < list.length; i += 2) {
+	  if(list[i].toString() == key) {
+	    found = true;
+	    break;
+	  }
+	}
+	if(found) {
+	  if(i == list.length) i -= 2;
+	    list.splice(i, 2);
+	    interp.setVar(name, dict);
+	}
 	return dict;
       });
     /*
@@ -278,24 +342,27 @@ function TclInterp () {
 	if (args.length == 2) rc = args[1];
 	process.exit(rc);
       });
-    acos = Math.acos;
-    exp  = Math.exp;
-    sqrt = Math.sqrt; // "publish" other Math.* functions as needed
+    var acos = Math.acos;
+    var exp  = Math.exp;
+    var sqrt = Math.sqrt; // "publish" other Math.* functions as needed
 
     this.registerCommand("expr", function (interp, args) {
 	var expression = args.slice(1).join(" ");
 	return interp.expr(interp, expression);
       });
-    this.expr = function ($interp, $expression) { // also used in for, if, while
+    this.expr = function (interp, expression) { // also used in for, if, while
       try {
-	var $mx = $expression.match(/(\[.*\])/g);
-	for ($i in $mx)
-	  puts("have to deal with "+$mx[i].toString());
+	var mx = expression.match(/(\[.*\])/g);
+	for (var i in mx)
+	  puts("have to deal with "+mx[i].toString());
       } catch(e) {puts(i+". exception: "+e);}
-      $mx = $expression.match(/(\$[A-Za-z0-9_:]+)/g);
-      for ($i in $mx)
-	eval("var "+$mx[$i]+" = "+$interp.getVar($mx[$i].slice(1)));
-      var res = eval($expression);
+      mx = expression.match(/(\$[A-Za-z0-9_:]+)/g);
+      for (i in mx) {
+	var val = interp.getVar(mx[i].slice(1)).toString();
+	if(isNaN(val) || !isFinite(val)) val = '"'+val+'"';
+	eval("var "+mx[i]+' = '+val);
+      }
+      var res = eval(expression);
       if(res == false) res = 0; else if(res == true) res = 1;
       return res;
     };
@@ -335,29 +402,53 @@ function TclInterp () {
         var res    = "";
         interp.inLoop = true;
         interp.code = interp.OK;
-        for(i in list) {
-             interp.setVar(args[1],interp.objectify(list[i]));
-             interp.eval(body);
-             if(interp.code == interp.BRK) break;
-             if(interp.code == interp.CNT) continue;
+        for(var i in list) {
+	  //puts("now at "+list[i]+" level: "+interp.level);
+	  interp.setVar(args[1],interp.objectify(list[i]));
+	  interp.eval(body);
+	  if(interp.code == interp.BRK) break;
+	  if(interp.code == interp.CNT) continue;
         }
         interp.inLoop = false;
         if(interp.code == interp.BRK || interp.code == interp.CNT)
             interp.code=interp.OK;
         return "";
     });
-    /*    this.registerCommand("gets", function (interp, args) {
+    this.registerCommand("format", function (interp, args) {
+        this.arity(args, 3);
+	var fmt = args[1];
+	var val = args[2];
+	if(fmt=="%x") {
+	  var x = new Number(val);
+	  return x.toString(16);
+	} else if(fmt=="%X") {
+	  var x = new Number(val);
+	  return x.toString(16).toUpperCase();
+	}
+	else throw "unknown format";
+	
+      });
+    /*
+    this.registerCommand("gets", function (interp, args) {
         this.arity(args, 2, 3);
-        var reply; // = prompt(args[1],"");
-        process.stdin.resume();
-        process.stdin.on('data', function(str) {
-        reply = str;
-            });
+	this.tmp = null;
+	rl.on('line', itp.gets);
+	while(true) {
+	  if(this.tmp != null) break;
+	};
+	rl.on('line', this.getsevalputs);
+        var reply = this.tmp;
+        // = prompt(args[1],"");
+        //process.stdin.resume();
+        //process.stdin.on('data', function(str) {
+        //reply = str;
+        //    });
         if(args[2] != null) {
-            interp.setVar(args[2],interp.objectify(reply));
-            return reply.length;
+	  interp.setVar(args[2],interp.objectify(reply));
+	  return reply.length;
         } else return reply;
-        }); */
+      });
+    */
     this.registerCommand("if", function (interp, args) {
         this.arity(args, 3, Infinity);
         var cond = args[1].toString();
@@ -405,28 +496,31 @@ function TclInterp () {
         return interp.mkList(interp.commands);
     });
     this.registerSubCommand("info", "exists", function (interp, args) {
-            var name = args[1];
-            try {interp.getVar(name); return 1;} catch(e) {return 0;}
+        this.arity(args, 2);
+	var name = args[1];
+	try {interp.getVar(name); return 1;} catch(e) {return 0;}
     });
     this.registerSubCommand("info", "globals", function (interp, args) {
         return interp.mkList(interp.callframe[0]);
     });
+    /* not in "real" Tcl
     this.registerSubCommand("info", "isensemble", function (interp, args) {
         this.arity(args, 2);
         var name = args[1].toString();
-        return (interp.getCommand(name).ensemble != null);
-    });
+	var cmd  = interp.getCommand(name);
+        return (cmd != null && cmd.ensemble != null)? "1" : "0";
+	}); */
     this.registerSubCommand("info", "level", function (interp, args) {
 	if(args.length == 1)
 	  return interp.level;
 	var delta = args[1];
 	return interp.levelcall[interp.level - delta];
     });
-    this.registerSubCommand("info", "na", function (interp, args) {
+    this.registerSubCommand("info", "nameofexecutable", function (interp, args) {
             return process.execPath;
     });
     this.registerSubCommand("info", "patchlevel", function (interp, args) {
-            return interp.patchlevel.toString();
+	return interp.patchlevel;
     });
     this.registerSubCommand("info", "procs", function (interp, args) {
         return interp.mkList(interp.procs);
@@ -435,7 +529,13 @@ function TclInterp () {
         return interp.script;
     });
     this.registerSubCommand("info", "vars", function (interp, args) {
-        return interp.mkList(interp.callframe[interp.level]);
+	var res = [];
+	for(i in interp.callframe[interp.level]) {
+	  try {
+	    if(interp.getVar(i) != null) {res.push(i);}
+	  } catch(e) {};
+	}
+	return res;
     });
     this.registerCommand("join", function (interp, args) {
 	this.arity(args, 2, 3);
@@ -444,7 +544,7 @@ function TclInterp () {
 	if(args.length == 3) sep = args[2].toString();
 	var res = [];
 	var re  = /^{.*}$/;
-	for (i in lst) {
+	for (var i in lst) {
 	  var word = lst[i].toString();
 	  if (re.test(word)) word = word.substring(1,word.length-1);
 	  res.push(word);
@@ -462,6 +562,7 @@ function TclInterp () {
 	} catch(e) {var list = new TclObject([]);}
         list.toList();
         for (var i = 2; i < args.length; i++) {
+	  if(args[i] == "") args[i] = "{}";
 	  list.content.push(interp.objectify(args[i]));
         }
         interp.setVar(vname, list);
@@ -518,7 +619,7 @@ function TclInterp () {
     this.registerCommand("lsearch", function (interp, args) {
         this.arity(args, 3);
         var lst = args[1].toList();
-        for(i in lst) if(lst[i] == args[2].toString()) return i;
+        for(var i in lst) if(lst[i] == args[2].toString()) return i;
         return -1;
       });
     this.registerCommand("lsort", function (interp, args) {
@@ -598,7 +699,7 @@ function TclInterp () {
         if (args.length == 3) sep = args[2].toString();
 	var res = [], e;
         var tmp = str.split(sep);
-	for(i in tmp) {
+	for(var i in tmp) {
 	  e = tmp[i];
 	  if(e == "") e = "{}";
 	  res.push(e);
@@ -662,11 +763,12 @@ function TclInterp () {
     });
     this.registerCommand("unset", function (interp, args) {
         this.arity(args, 2, Infinity);
-        for (var i = 2; i < args.length; i++)
-            interp.setVar(args[i], null);
+        for (var i = 1; i < args.length; i++)
+	  interp.setVar(args[i], null);
     });
     this.registerCommand("uplevel",function (interp, args) {
         this.arity(args, 3, Infinity);
+	var mycallframe = interp.callframe[interp.level];
         var delta = args[1].toInteger();
         interp.level -= delta;
 	if(interp.level < 0) {
@@ -679,6 +781,7 @@ function TclInterp () {
         } else var code = args.slice(2).join(" ");
         var res = interp.eval(code);
         interp.level += delta;
+	interp.callframe[interp.level] = mycallframe;
         return res;
       });
     this.registerCommand("while", function (interp, args) {
@@ -704,7 +807,9 @@ function TclInterp () {
     this.registerCommand("native", function (interp, args) {
         this.arity(args, 3);
         var cmd = args[1].toList();
+	puts("before eval "+args[2]);
         var func = eval(args[2].toString());
+	puts("ok so far");
         //alert("in: "+args[2].toString()+", func: "+ func);
         if (cmd.length == 1) {
 	  interp.registerCommand(cmd[0].toString(), func);
@@ -730,7 +835,7 @@ function TclInterp () {
       }
     }
     var ops = ["+","-","*","/","%","<",">","==","!="];
-    for (i in ops)
+    for (var i in ops)
       this.registerCommand(ops[i],function (interp, args) {
 	  this.arity(args, 3);
 	  var name = args[0].toString();
@@ -782,15 +887,16 @@ function TclInterp () {
     }
     this.call = function(args) {
       if(_step) puts("this.call "+args);
-      var func = this.getCommand(args[0].toString());
+      var func = this.getCommand(args[0]);
+      if(func == null) throw 'invalid command name "'+args[0]+'"';
       var res  = func.call(this,args);
       switch (this.code) {
       case this.OK: case this.RET: return res;
       case this.BRK:
-	if (!this.inLoop) throw "Invoked break outside of a loop";
+	if (!this.inLoop) throw 'invoked "break" outside of a loop';
 	break;
       case this.CNT:
-	if (!this.inLoop) throw "Invoked continue outside of a loop";
+	if (!this.inLoop) throw 'invoked "continue" outside of a loop';
 	break;
       default: throw "Unknown return code " + this.code;
       }
@@ -856,20 +962,31 @@ Tcl.Proc = function (interp, args) {
 }
 /** Manage subcommands */
 Tcl.EnsembleCommand = function (interp, args) {
-   var sub    = args[1].toString();
-   var main = args.shift().toString()+" "+sub;
-   args[0] = main;
-   var ens = this.ensemble;
-   if (ens == null) {
-        throw "Not an ensemble command: "+main;
-    } else if( ens[sub] == null) {
-     var r = [];
-     for (var i in ens) r.push(i);
-     r[r.length-1] = "or "+r[r.length-1];
-     throw 'unknown or ambiguous subcommand "'+sub+'": must be '+
-     r.join(", ");
+  var sub  = args[1].toString();
+  var main = args.shift().toString()+" "+sub;
+  args[0]  = main;
+  var ens  = this.ensemble;
+  if (ens == null) {
+    throw "Not an ensemble command: "+main;
+  } else if (ens[sub] == null) {
+    
+    var matches   = 0, lastmatch = "";
+    for (var i in ens) { // maybe unambiguous prefix?
+      if (i.match("^"+sub) != null) {
+	matches  += 1;
+	lastmatch = i;
+      } 
     }
-    return ens[sub].call(interp, args);
+    if(matches == 1) {
+      sub = lastmatch;
+    } else {
+      var r = [];
+      for (i in ens) r.push(i);
+      r[r.length-1] = "or "+r[r.length-1];
+      throw 'unknown or ambiguous subcommand "'+sub+'": must be '+r.join(", ");
+    }
+  }
+  return ens[sub].call(interp, args);
 }
 function TclObject(text) {
     this.TEXT    = 0;
@@ -1064,7 +1181,7 @@ function TclParser(text) {
 	return this.OK;
       }
       if (this.cur == "\\") {
-	if (this.len >= 2) this.feedSequence();
+	//if (this.len >= 2) this.feedSequence();
       }
       else if ("$[ \t\n\r;".indexOf(this.cur)>=0) {
 	if ("$[".indexOf(this.cur)>=0 || !this.insidequote) {
@@ -1085,7 +1202,7 @@ function TclParser(text) {
     return this.OK;
   }
   this.parseList = function () {
-    level = 0;
+    var level = 0;
     this.start = this.index;
     while (true) {
       if (this.len == 0) {
@@ -1234,7 +1351,7 @@ function TclParser(text) {
       break;
     case 'x':
       var hex = this.steal(2);
-      //puts("enter case x, hex: "+hex);
+      puts("enter case x, hex: '"+hex+"'");
       if (hex != Tcl.isHexSeq.exec(hex))
 	throw "Invalid unicode escape sequence: "+hex;
       cur = String.fromCharCode(parseInt(hex,16));
@@ -1260,6 +1377,7 @@ function TclParser(text) {
     var tail = this.text.substring(this.index+1);
     var word = tail.substr(0, n);
     this.text = this.text.substring(0, this.index-1) + tail.substring(n);
+    //puts("tail: "+tail+" word: "+word);
     return word;
   }
   this.feedcharstart = function () {
@@ -1290,13 +1408,19 @@ var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
 rl.setPrompt('% ');
 rl.prompt();
-rl.on('line', function(line) {
+itp.getsevalputs = function(line) {
     try {
       res = itp.eval(line.trim());
     } catch(e) {res = e;}
     if(res != null && res.toString() != "" && res.toString().length) 
-      console.log(res.toString());
+      puts(res.toString());
     rl.prompt();
-  }).on('close',function() {
+};
+itp.gets = function(line) {
+  puts("received "+line); 
+  this.tmp = line;
+}
+rl.on('line', itp.getsevalputs
+).on('close',function() {
     process.exit(0);
   });
