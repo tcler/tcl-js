@@ -31,6 +31,11 @@ e.g. {sum 1 2 3} -> 6
 #native sum2 {function (interp, args) {return eval(args.join("+"));}}
 #e.g. {sum2 2 3 4} -> 9
 
+e.g. {catch foo msg} -> 1
+e.g. {set msg} -> {invalid command name "foo"}
+e.g. {catch {expr 7*6}} -> 0
+e.g. {catch {expr 7*6} msg; set msg} -> 42
+
 e.g. {concat {a b} {c d}} -> {a b c d}
 
 e.g. {set d [dict create a 1 b 2 c 3]} -> {a 1 b 2 c 3}
@@ -74,6 +79,10 @@ e.g. {expr {$x}}   -> 253
 e.g. {expr 6 * 7}  -> 42
 e.g. {expr 1 == 2} -> 0
 e.g. {expr 1 < 2}  -> 1
+e.g. {expr 1 > 2}  -> 0
+e.g. {expr 1 != 2} -> 1
+e.g. {expr 1 <= 2} -> 1
+e.g. {expr 1 >= 2} -> 0
 e.g. {expr !0}     -> 1
 e.g. {expr !42}    -> 0
 e.g. {set x 3}     -> 3
@@ -81,6 +90,9 @@ e.g. {expr $x+1}   -> 4
 e.g. {expr {$x+1}} -> 4
 e.g. {set x a; set y b; expr {$x == $y}} -> 0
 e.g. {expr {$x != $y}} -> 1
+e.g. {expr 43 % 5}     -> 3 
+e.g. {set x -44; expr {-$x}} -> 44
+e.g. {expr 1<<3} -> 8
 
 set forres ""
 e.g. {for {set i 0} {$i < 5} {incr i} {append forres $i}; set forres} -> 01234
@@ -126,6 +138,11 @@ e.g. {lsearch $x b}       -> 1
 e.g. {lsearch $x y}       -> -1
 e.g. {lsort {z x y}}      -> {x y z}
 
+e.g. {proc f args {expr [join $args +]}} -> ""
+e.g. {f 1}     -> 1
+e.g. {f 1 2}   -> 3
+e.g. {f 1 2 3} -> 6
+
 e.g. {regexp {X[ABC]Y} XAY}    -> 1
 e.g. {regexp {X[ABC]Y} XDY}    -> 0
 e.g. {regsub {[A-C]+} uBAAD x} -> uxD 
@@ -150,7 +167,7 @@ e.g. {string tolower Tcl}     -> tcl
 e.g. {string toupper Tcl}     -> TCL
 e.g. {string trim " foo "}    -> foo
 
-#e.g. {set x a.\x62.c} -> a.b.c ;# severe malfunction, breaks test suite operation :(
+e.g. {set x a.\x62.c} -> a.b.c ;# severe malfunction, breaks test suite operation :(
 
 puts "total $total tests, passed $passed, failed $fail"
 #----------- clean up variables used in tests

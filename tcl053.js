@@ -102,11 +102,11 @@ function TclInterp () {
       } catch (e) {
 	var msg = code.substr(0,128);
 	if(msg.length >= 125) msg += "...";
-	puts(e);
 	var msg = e+'\n        while executing\n"'+msg+'"';
 	for(var i = this.level; i > 0; i--)
 	  msg += '\n        invoked from within\n"'+this.levelcall[i]+'"'
 	this.setVar("::errorInfo", msg);
+	throw e;
       }
     }
     this.eval2 = function(code) {
@@ -183,6 +183,15 @@ function TclInterp () {
     this.registerCommand("break", function (interp, args) {
         interp.code = interp.BRK;
         return;
+      });
+    this.registerCommand("catch", function (interp, args) {
+	this.arity(args, 2, 3);
+	var code = args[1].toString();
+	var res;
+	var rc   = 0;
+	try {res = interp.eval(code);} catch(e) {res = e; rc = 1;}
+	if(args.length == 3) interp.setVar(args[2], res);
+	return rc;
       });
     this.registerCommand("cd", function (interp, args) {
 	this.arity(args, 1, 2);
@@ -678,7 +687,8 @@ function TclInterp () {
     this.registerCommand("set", function (interp, args) {
         this.arity(args, 2, 3);
         var name = args[1];
-        if (args.length == 3) interp.setVar(name, args[2]);
+	var val  = eval(args[2]);
+        if (args.length == 3) interp.setVar(name, val);
         return interp.getVar(name);
     });
     this.registerCommand("source", function (interp, args) {
@@ -687,7 +697,8 @@ function TclInterp () {
         try {
 	  var data = fs.readFileSync(interp.script).toString();
         } catch(e) {
-	  throw 'couldn\' read file "'+interp.script+'": no such file or directory';}
+	  throw 'couldn\' read file "'+interp.script
+	    +'": no such file or directory';}
 	var res    = interp.eval(data);
 	interp.script = "";
 	return res;
@@ -695,14 +706,13 @@ function TclInterp () {
     this.registerCommand("split", function (interp, args) {
         this.arity(args, 2, 3);
         var str = args[1].toString();
-        var sep = " ";
-        if (args.length == 3) sep = args[2].toString();
-	var res = [], e;
+        var sep = (args.length == 3)? args[2].toString() : " ";
+	var res = [], element;
         var tmp = str.split(sep);
 	for(var i in tmp) {
-	  e = tmp[i];
-	  if(e == "") e = "{}";
-	  res.push(e);
+	  element = tmp[i];
+	  if(element == "") element = "{}";
+	  res.push(element);
 	}
 	return res.join(" ");
       });
@@ -820,41 +830,6 @@ function TclInterp () {
         interp.registerSubCommand(base, cmd.join(" "), eval(args[2].toString()));
         return;
       });
-    this.math = function (name, a, b) {
-      switch (name) {
-      case "+":  return a + b;
-      case "-":  return a - b;
-      case "*":  return a * b;
-      case "/":  return a / b;
-      case "%":  return a % b;
-      case "<":  return a < b? "1":"0";
-      case ">":  return a > b? "1":"0";
-      case "==": return a == b? "1":"0";
-      case "!=": return a != b? "1":"0";
-      default:   throw "Unknown operator: '"+name+"'";
-      }
-    }
-    var ops = ["+","-","*","/","%","<",">","==","!="];
-    for (var i in ops)
-      this.registerCommand(ops[i],function (interp, args) {
-	  this.arity(args, 3);
-	  var name = args[0].toString();
-	  var a    = interp.objectify(args[1]);
-	  var b    = interp.objectify(args[2]);
-	  if (name == '==') 
-	    return new TclObject(a.toString() == b.toString()?"1":"0","BOOL");
-	  if (name == '!=') 
-	    return new TclObject(a.toString() != b.toString()?"1":"0","BOOL");
-	  
-	  var x = a.getNumber();
-	  var y = b.getNumber();
-	  if (a.isInteger() && b.isInteger())
-	    return new TclObject(interp.math(name, x, y),"INTEGER");
-	  if (a.isReal() && b.isReal())
-	    return new TclObject(interp.math(name, x, y),"REAL");
-	  return new TclObject(interp.math(name, args[1].toString(), 
-					   args[2].toString()));
-        });
     this.mkList = function(x) {
       var list = [];
       for (var name in x) {list.push(name);}
@@ -1154,15 +1129,15 @@ function TclParser(text) {
   this.ESC = 4;
   this.CMD = 5;
   this.VAR = 6;
-  this.text  = text;
-  this.start = 0;
-  this.end   = 0;
+  this.text        = text;
+  this.start       = 0;
+  this.end         = 0;
   this.insidequote = false;
-  this.index = 0;
-  this.len = text.length;
-  this.type = this.EOL;
-  this.cur = this.text.charAt(0);
-  this.getText = function () {
+  this.index       = 0;
+  this.len         = text.length;
+  this.type        = this.EOL;
+  this.cur         = this.text.charAt(0);
+  this.getText     = function () {
     return this.text.substring(this.start,this.end+1);
   }
   this.parseString = function () {
@@ -1180,10 +1155,10 @@ function TclParser(text) {
 	this.type = this.ESC;
 	return this.OK;
       }
-      if (this.cur == "\\") {
-	//if (this.len >= 2) this.feedSequence();
-      }
-      else if ("$[ \t\n\r;".indexOf(this.cur)>=0) {
+      /*if (this.cur == "\\") { // works not :(
+	if (this.len >= 2) this.feedSequence();
+	}
+	else*/ if ("$[ \t\n\r;".indexOf(this.cur)>=0) {
 	if ("$[".indexOf(this.cur)>=0 || !this.insidequote) {
 	  this.end = this.index-1;
 	  this.type = this.ESC;
@@ -1191,7 +1166,7 @@ function TclParser(text) {
 	}
       }
       else if (this.cur == '"' && this.insidequote) {
-	this.end    = this.index-1;
+	this.end  = this.index-1;
 	this.type = this.ESC;
 	this.feedchar();
 	this.insidequote = false;
@@ -1211,9 +1186,9 @@ function TclParser(text) {
 	return;
       }
       switch (this.cur) {
-      case "\\":
+	/*case "\\":
 	if (this.len >= 2) this.feedSequence();
-	break;
+	break;*/
       case " ": case "\t": case "\n": case "\r":
 	if (level > 0) break;
 	this.end  = this.index - 1;
@@ -1254,8 +1229,8 @@ function TclParser(text) {
       else if (this.cur == "]" && blevel == 0) {
 	level--;
 	if (level == 0) break;
-      } else if (this.cur == "\\") {
-	this.feedSequence();
+	//} else if (this.cur == "\\") {
+	//this.feedSequence();
       } else if (this.cur == "{") {
 	blevel++;
       } else if (this.cur == "}") {
@@ -1283,9 +1258,10 @@ function TclParser(text) {
     var level = 1;
     this.feedcharstart();
     while (true) {
-      if (this.len > 1 && this.cur == "\\") {
+      /*if (this.len > 1 && this.cur == "\\") {
 	this.feedSequence();
-      } else if (this.len == 0 || this.cur == "}") {
+	} else*/
+      if (this.len == 0 || this.cur == "}") {
 	level--;
 	if (level == 0 || this.len == 0) {
 	  this.end = this.index-1;
@@ -1327,13 +1303,14 @@ function TclParser(text) {
       }
       return this.parseString();
     }
+    puts("unreachable?");
     return this.OK; // unreached
   }
   this.feedSequence = function () {
     //return;
     if (this.cur != "\\") throw "Invalid escape sequence";
     var cur = this.steal(1);
-    //puts("enter feedSequence, text: "+this.text+" cur: "+cur);
+    puts("enter feedSequence, text: "+this.text+" cur: "+cur);
     var specials = {};
     specials.a = "\a";
     specials.b = "\b";
@@ -1350,12 +1327,14 @@ function TclParser(text) {
       cur = String.fromCharCode(parseInt(hex,16));
       break;
     case 'x':
-      var hex = this.steal(2);
-      puts("enter case x, hex: '"+hex+"'");
+      /*
+      var hex = cur; //this.steal(2);
+      puts("enter case x, hex: '"+hex+"' cur: '"+cur+'"');
       if (hex != Tcl.isHexSeq.exec(hex))
 	throw "Invalid unicode escape sequence: "+hex;
       cur = String.fromCharCode(parseInt(hex,16));
       //puts("hex: "+hex.toString()+" cur: "+cur);
+      */
       break;
     case "a": case "b": case "f": case "n":
     case "r": case "t": case "v":
