@@ -11,8 +11,9 @@
  */
 // 'use strict'; // breaks some tests, like expr 0376, for loop
 var _step = 0; // set to 1 for debugging
-var fs = require('fs');
-var puts = console.log;
+if(process.env["DEBUG"] == 1) _step = 1;
+var fs    = require('fs');
+var puts  = console.log; // saves a lot of typing... ;^)
 
 function TclInterp () {
     this.patchlevel = "0.5.3";
@@ -22,12 +23,14 @@ function TclInterp () {
     this.commands   = {};
     this.procs      = [];
     this.script     = "";
+    this.getsing    = 0;
     this.OK  = 0;
     this.RET = 1;
     this.BRK = 2;
     this.CNT = 3;
     this.getVar = function(name) {
-        var nm = name.toString();
+        var nm  = name.toString();
+	// no arrays supported yet, but a read-only exception for ::env()
         if (nm.match("^::env[(]")) nm = nm.substr(2);
         if (nm.match("^env[(]")) {
             var key = nm.substr(4,nm.length-5);
@@ -41,11 +44,13 @@ function TclInterp () {
         return val;
     }
     this.setVar = function(name, val) {
-        var nm = name.toString();
-        if (nm.match("^::")) {
-            this.callframe[0][nm.substr(2)] = val;
-        } else {this.callframe[this.level][name] = val;}
-        return val;
+      var nm  = name.toString();
+      if (val != null && val.toString().match(/\\/))
+	val = eval("'"+val.toString()+"'");
+      if (nm.match("^::")) {
+	this.callframe[0][nm.substr(2)] = val;
+      } else {this.callframe[this.level][name] = val;}
+      return val;
     }
     this.setVar("argc",  process.argv.length-2);
     this.setVar("argv0", process.argv[1]);
@@ -53,7 +58,6 @@ function TclInterp () {
     this.setVar("errorInfo", "");
 
     this.incrLevel = function() {
-      //puts("going down from ("+this.level+"): "+this.levelcall);
       this.callframe[++this.level] = {};
       return this.level;
     }
@@ -106,6 +110,7 @@ function TclInterp () {
 	for(var i = this.level; i > 0; i--)
 	  msg += '\n        invoked from within\n"'+this.levelcall[i]+'"'
 	this.setVar("::errorInfo", msg);
+	if(_step) puts("e: "+e);
 	throw e;
       }
     }
@@ -172,6 +177,11 @@ function TclInterp () {
       return this.objectify(result);
     }
     //---------------------------------- Commands in alphabetical order
+    /*this.registerCommand("after", function (interp, args) {
+        this.arity(args, 3);
+	var code = args[2].toString();
+	setTimeout(args[1], function(code) {interp.eval(code)});
+	});*/
     this.registerCommand("append", function (interp, args) {
         this.arity(args, 2, Infinity);
         var vname = args[1].toString();
@@ -206,8 +216,10 @@ function TclInterp () {
       });
     this.registerSubCommand("clock", "format", function (interp, args) {
         var now = new Date();
-        now.setTime(args[1]);
-        return now.toString();
+        now.setTime(args[1]*1000);
+        var ts = now.toString().split(" ");
+	var tz = ts[6].toString().replace("(","").replace(")","");
+	return ts[0]+" "+ts[1]+" "+ts[2]+" "+ts[4]+" "+tz+" "+ts[3];
       });
     this.registerSubCommand("clock", "milliseconds", function (interp, args) {
 	var t = new Date();
@@ -360,13 +372,14 @@ function TclInterp () {
 	return interp.expr(interp, expression);
       });
     this.expr = function (interp, expression) { // also used in for, if, while
+      var mx;
       try {
-	var mx = expression.match(/(\[.*\])/g);
+	mx = expression.match(/(\[.*\])/g);
 	for (var i in mx)
 	  puts("have to deal with "+mx[i].toString());
       } catch(e) {puts(i+". exception: "+e);}
       mx = expression.match(/(\$[A-Za-z0-9_:]+)/g);
-      for (i in mx) {
+      for (var i in mx) {
 	var val = interp.getVar(mx[i].slice(1)).toString();
 	if(isNaN(val) || !isFinite(val)) val = '"'+val+'"';
 	eval("var "+mx[i]+' = '+val);
@@ -375,11 +388,51 @@ function TclInterp () {
       if(res == false) res = 0; else if(res == true) res = 1;
       return res;
     };
+    this.registerSubCommand("file", "atime", function (interp, args) {
+        this.arity(args, 2);
+	var stat = fs.statSync(args[1].toString());
+	return stat.atime.getTime()/1000;
+      })
     this.registerSubCommand("file", "dirname", function (interp, args) {
         this.arity(args, 2);
-	var path = args[1].toString().split("/");
-	path.pop();
-	return path.join("/");
+	return interp.dirname(args[1].toString());
+     });
+    this.dirname = function(p) { // also used in [glob]
+      //require("path"); //not working :(
+      //return path.dirname(p.toString());
+      if(p == ".") p = process.cwd();
+      p = p.split("/"); 
+      p.pop();
+      if(p == "") return("/");
+      return p.join("/");
+    };
+    this.registerSubCommand("file", "exists", function (interp, args) {
+        this.arity(args, 2);
+	var file = args[1].toString();
+	try {var fd = fs.openSync(file,"r");} catch(e) {return 0;}
+	fs.closeSync(fd);
+	return 1;
+     });
+    this.registerSubCommand("file", "extension", function (interp, args) {
+        this.arity(args, 2);
+	var fn  = args[1].toString();
+	var res = fn.split(".").pop();
+	res = (res == fn)? "" : "."+res;
+	return res;
+     });
+    this.registerSubCommand("file", "mtime", function (interp, args) {
+        this.arity(args, 2);
+	var stat = fs.statSync(args[1].toString());
+	return stat.mtime.getTime()/1000;
+      })
+    this.registerSubCommand("file", "size", function (interp, args) {
+        this.arity(args, 2);
+	var stat = fs.statSync(args[1].toString());
+	return stat.size;
+      })
+    this.registerSubCommand("file", "tail", function (interp, args) {
+        this.arity(args, 2);
+	return args[1].toString().split("/").pop();
       });
     this.registerCommand("for", function (interp, args) {
         this.arity(args, 5);
@@ -434,30 +487,54 @@ function TclInterp () {
 	  var x = new Number(val);
 	  return x.toString(16).toUpperCase();
 	}
-	else throw "unknown format";
-	
+	else throw "unknown format";	
       });
-    /*
-    this.registerCommand("gets", function (interp, args) {
-        this.arity(args, 2, 3);
-	this.tmp = null;
-	rl.on('line', itp.gets);
-	while(true) {
-	  if(this.tmp != null) break;
-	};
-	rl.on('line', this.getsevalputs);
-        var reply = this.tmp;
-        // = prompt(args[1],"");
-        //process.stdin.resume();
-        //process.stdin.on('data', function(str) {
-        //reply = str;
-        //    });
-        if(args[2] != null) {
-	  interp.setVar(args[2],interp.objectify(reply));
-	  return reply.length;
-        } else return reply;
+   this.registerCommand("gets0", function (interp, args) {
+	this.arity(args, 2, 3);
+	interp.getsing = 1;
+	//interp.buf = "";
+	//while(interp.buf == "") {
+	//interp.timeout = setTimeout(function(){}, 10000);
+	//  if(interp.getsing==0) break;
+	//}
+	return; // result will be in interp.buf when done
+     });
+   this.gets = function(char) {
+     try {
+       if(char.match(/foo[\r\n]/)) {
+	 this.getsing = 0;
+	 puts("received: "+this.buf);
+       } else {
+	 puts("<"+char+">"+this.getsing);
+	 this.buf += char;
+       }
+     } catch(e) {puts(e)};
+   }
+   this.registerCommand("glob", function (interp, args) {
+	this.arity(args, 2, Infinity);
+	args.shift();
+	var res    = [];
+	var prefix = "";
+	var dir    = ".";
+	for (var arg in args) {
+	  var path    = args[arg].toString();
+	  if(path.match("[/]")) {
+	     var dir    = interp.dirname(path);
+	     var prefix = dir+"/";
+	  }
+	  var pattern = path.split("/").pop().replace(/[*]/g,".*");
+	  var files   = fs.readdirSync(dir);
+	  for (var i in files) {
+	    if(files[i].match("^[.]")) continue;
+	    if(files[i] == pattern) {res.push(files[i]);}
+	    if(files[i].match("^"+pattern+"$")) {
+	      var file = (dir == ".")? files[i] : dir+"/"+files[i];
+	      res.push(file.replace(/\/\//,"/"));
+	    }
+	  }
+	}
+	return res;
       });
-    */
     this.registerCommand("if", function (interp, args) {
         this.arity(args, 3, Infinity);
         var cond = args[1].toString();
@@ -539,7 +616,7 @@ function TclInterp () {
     });
     this.registerSubCommand("info", "vars", function (interp, args) {
 	var res = [];
-	for(i in interp.callframe[interp.level]) {
+	for(var i in interp.callframe[interp.level]) {
 	  try {
 	    if(interp.getVar(i) != null) {res.push(i);}
 	  } catch(e) {};
@@ -601,9 +678,9 @@ function TclInterp () {
       });
     this.registerCommand("lrange", function (interp, args) {
         this.arity(args, 4);
-        var list    = interp.objectify(args[1]);
+        var list  = interp.objectify(args[1]);
         var start = list.listIndex(args[2]);
-        var end     = list.listIndex(args[3])+1;
+        var end   = list.listIndex(args[3])+1;
         try {
 	  return list.content.slice(start, end);
         } catch (e) {return [];}
@@ -695,11 +772,12 @@ function TclInterp () {
         this.arity(args, 2);
         interp.script = args[1].toString();
         try {
-	  var data = fs.readFileSync(interp.script).toString();
+	  var data = fs.readFileSync(interp.script,{encoding: 'utf8'}).toString();
         } catch(e) {
+	  puts("e: "+e);
 	  throw 'couldn\' read file "'+interp.script
 	    +'": no such file or directory';}
-	var res    = interp.eval(data);
+	var res       = interp.eval(data);
 	interp.script = "";
 	return res;
       });
@@ -888,7 +966,7 @@ Tcl.isHexSeq   = new RegExp("[0-9a-fA-F]*");
 Tcl.isOctalSeq = new RegExp("[0-7]*");
 Tcl.isList     = new RegExp("[\\{\\} ]");
 Tcl.isNested   = new RegExp("^\\{.*\\}$");
-Tcl.getVar     = new RegExp("^[a-zA-Z0-9_]+", "g");
+Tcl.getVar     = new RegExp("^[:a-zA-Z0-9_]+", "g");
 
 Tcl.Proc = function (interp, args) {
    var priv = this.privdata;
@@ -924,7 +1002,7 @@ Tcl.Proc = function (interp, args) {
        interp.setVar(name, interp.objectify(args[i]));
    }
    if (name == "args" && i+1 < arglist.length)
-       throw "'args' should be the last argument";
+     throw "'args' should be the last argument";
    try {
        var res = interp.eval(body);
        interp.code = interp.OK;
@@ -944,8 +1022,7 @@ Tcl.EnsembleCommand = function (interp, args) {
   if (ens == null) {
     throw "Not an ensemble command: "+main;
   } else if (ens[sub] == null) {
-    
-    var matches   = 0, lastmatch = "";
+    var matches = 0, lastmatch = "";
     for (var i in ens) { // maybe unambiguous prefix?
       if (i.match("^"+sub) != null) {
 	matches  += 1;
@@ -1109,9 +1186,9 @@ function TclCommand(func, privdata) {
   this.ensemble = arguments[2];
   
   this.call = function(interp, args) {
-    var r = (this.func)(interp, args);
-    r = interp.objectify(r);
-    return r;
+    var res = (this.func)(interp, args);
+    res = interp.objectify(res);
+    return res;
   }
   this.arity = function (args, min, max) {
     if(max == undefined) max = min;
@@ -1141,7 +1218,7 @@ function TclParser(text) {
     return this.text.substring(this.start,this.end+1);
   }
   this.parseString = function () {
-    var newword = (this.type==this.SEP ||
+    var newword = (this.type == this.SEP ||
 		   this.type == this.EOL || this.type == this.STR);
     if (newword && this.cur == "{") return this.parseBrace();
     else if (newword && this.cur == '"') {
@@ -1151,7 +1228,7 @@ function TclParser(text) {
     this.start = this.index;
     while (true) {
       if (this.len == 0) {
-	this.end = this.index-1;
+	this.end  = this.index-1;
 	this.type = this.ESC;
 	return this.OK;
       }
@@ -1160,7 +1237,7 @@ function TclParser(text) {
 	}
 	else*/ if ("$[ \t\n\r;".indexOf(this.cur)>=0) {
 	if ("$[".indexOf(this.cur)>=0 || !this.insidequote) {
-	  this.end = this.index-1;
+	  this.end  = this.index-1;
 	  this.type = this.ESC;
 	  return this.OK;
 	}
@@ -1177,7 +1254,7 @@ function TclParser(text) {
     return this.OK;
   }
   this.parseList = function () {
-    var level = 0;
+    var level  = 0;
     this.start = this.index;
     while (true) {
       if (this.len == 0) {
@@ -1303,8 +1380,7 @@ function TclParser(text) {
       }
       return this.parseString();
     }
-    puts("unreachable?");
-    return this.OK; // unreached
+    //return this.OK; // unreached
   }
   this.feedSequence = function () {
     //return;
@@ -1364,10 +1440,10 @@ function TclParser(text) {
     this.start = this.index;
   }
   this.setPos = function (index) {
-    var d = index-this.index;
+    var d      = index-this.index;
     this.index = index;
-    this.len -= d;
-    this.cur = this.text.charAt(this.index);
+    this.len  -= d;
+    this.cur   = this.text.charAt(this.index);
   }
   this.feedchar = function () {
     this.index++;
@@ -1384,22 +1460,19 @@ process.argv.slice(2).forEach(function(cmd,index,array) {
        itp.eval(cmd);
      });
 var readline = require('readline');
-var rl = readline.createInterface(process.stdin, process.stdout);
+var rl       = readline.createInterface(process.stdin, process.stdout);
 rl.setPrompt('% ');
 rl.prompt();
-itp.getsevalputs = function(line) {
+itp.gets = function(line) {
+  if (itp.getsing == 0) {
     try {
       res = itp.eval(line.trim());
     } catch(e) {res = e;}
-    if(res != null && res.toString() != "" && res.toString().length) 
-      puts(res.toString());
-    rl.prompt();
+    if (itp.getsing == 0) {
+      if(res != null && res.toString().length) 
+	puts(res.toString());
+      rl.prompt();
+    }
+  } else {itp.buf = line; itp.getsing = 0; rl.prompt();}
 };
-itp.gets = function(line) {
-  puts("received "+line); 
-  this.tmp = line;
-}
-rl.on('line', itp.getsevalputs
-).on('close',function() {
-    process.exit(0);
-  });
+rl.on('line', itp.gets).on('close',function() {process.exit(0);});

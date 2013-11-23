@@ -8,14 +8,15 @@ set version 0.5.3
 set total   0
 set passed  0
 set fail    0
-puts "------------------------ [info script] patchlevel: [info patchlevel]"
+puts "----- [info script] of [clock format [file mtime [info script]]], patchlevel: [info patchlevel]"
 
 proc e.g. {cmd -> expected} {
+    #puts $cmd
     incr ::total
     incr ::fail ;# to also count exceptions
     set res [uplevel 1 $cmd]
     if ![string equal $res $expected] {
-    #if {$res != $expected} {} #should work, but wouldn't
+	#if {$res != $expected} {}
 	puts "**** $cmd -> $res, expected: $expected"
     } else {incr ::passed; incr ::fail -1}
 }
@@ -28,15 +29,16 @@ e.g. {append x bar}     -> foobar
 
 proc sum args {expr [join $args +]}
 e.g. {sum 1 2 3} -> 6
-#native sum2 {function (interp, args) {return eval(args.join("+"));}}
-#e.g. {sum2 2 3 4} -> 9
 
-e.g. {catch foo msg} -> 1
-e.g. {set msg} -> {invalid command name "foo"}
+e.g. {catch foo msg}    -> 1
+e.g. {set msg}          -> {invalid command name "foo"}
 e.g. {catch {expr 7*6}} -> 0
 e.g. {catch {expr 7*6} msg; set msg} -> 42
 
+e.g. {clock format 0}   -> {Thu Jan 01 01:00:00 CET 1970}
+
 e.g. {concat {a b} {c d}} -> {a b c d}
+e.g. {concat $::version}  -> $version
 
 e.g. {set d [dict create a 1 b 2 c 3]} -> {a 1 b 2 c 3}
 e.g. {dict exists $d c} -> 1
@@ -51,8 +53,11 @@ e.g. {dict unset d nix} -> {a 1 c 3}
 e.g. {dict set dx a 1}  -> {a 1} ;# create new dict if not exists
 
 e.g. {set home [file dirname [pwd]]; list} -> {}
-e.g. {string equal [set env(HOME)] $home}   -> 1
+e.g. {string equal [set env(HOME)] $home}  -> 1
+# e.g. {string equal $::env(HOME) $home}  -> 1
 e.g. {string equal [set ::env(HOME)] $home} -> 1
+e.g. {file dirname /foo/bar/grill}          -> /foo/bar
+e.g. {file tail    /foo/bar/grill}          -> grill
 
 e.g. {expr 6*7}         -> 42
 e.g. {expr {6 * 7 + 1}} -> 43
@@ -60,7 +65,6 @@ e.g. {set x 43}         -> 43
 e.g. {expr {$x-1}}      -> 42
 e.g. {expr $x-1}        -> 42
 if ![info exists auto_path] { ;#these tests are not for a real tclsh
-    e.g. {clock format 0} -> {Thu Jan 01 1970 01:00:00 GMT+0100 (CET)}
     e.g. {set i [expr 1/0]} -> Infinity
     e.g. {expr $i==$i+42}   -> 1
     e.g. {set n [expr sqrt(-1)]} -> NaN
@@ -94,6 +98,12 @@ e.g. {expr 43 % 5}     -> 3
 e.g. {set x -44; expr {-$x}} -> 44
 e.g. {expr 1<<3} -> 8
 
+e.g. {file dirname foo/bar/grill}  -> foo/bar
+e.g. {file dirname /foo/bar/grill} -> /foo/bar
+e.g. {file extension foo.txt}      -> .txt
+e.g. {file extension Makefile}     -> ""
+e.g. {file tail foo/bar/grill}     -> grill
+
 set forres ""
 e.g. {for {set i 0} {$i < 5} {incr i} {append forres $i}; set forres} -> 01234
 e.g. {foreach i {a b c d e} {append foreachres $i}; set foreachres}   -> abcde
@@ -106,14 +116,14 @@ e.g. {incr x}    -> 42
 e.g. {incr x 2}  -> 44
 e.g. {incr x -3} -> 41
 
-e.g. {info args e.g.} -> {cmd -> expected}
+e.g. {info args e.g.}        -> {cmd -> expected}
 e.g. {unset -nocomplain foo} -> {}
-e.g. {info exists foo} -> 0
-e.g. {set foo 42}      -> 42
-e.g. {info exists foo} -> 1
-e.g. {info level}      -> 0 ;# e.g. runs the command one level up
+e.g. {info exists foo}       -> 0
+e.g. {set foo 42}            -> 42
+e.g. {info exists foo}       -> 1
+e.g. {info level}            -> 0 ;# e.g. runs the command one level up
 e.g. {proc f x {set y 0; info vars}} -> ""
-e.g. {f 41}            -> {x y}
+e.g. {f 41}                          -> {x y}
 set tmp [f 40]; e.g. {lappend tmp z} -> {x y z}
 e.g. {info args f}      -> x
 e.g. {info body f}      -> {set y 0; info vars}
@@ -142,6 +152,7 @@ e.g. {proc f args {expr [join $args +]}} -> ""
 e.g. {f 1}     -> 1
 e.g. {f 1 2}   -> 3
 e.g. {f 1 2 3} -> 6
+e.g. {proc f {arg b} {expr $arg*$b}; f 6 7} -> 42 ;# should work with 'args'
 
 e.g. {regexp {X[ABC]Y} XAY}    -> 1
 e.g. {regexp {X[ABC]Y} XDY}    -> 0
@@ -154,28 +165,30 @@ e.g. {split usr/local/bin /} -> {usr local bin}
 e.g. {split /usr/local/bin /} -> {{} usr local bin}
 e.g. {split abc ""}          -> {a b c}
 
-e.g. {string compare a b}     -> -1
-e.g. {string compare b a}     -> 1
-e.g. {string compare b b}     -> 0
-e.g. {string equal foo foo}   -> 1
-e.g. {string equal foo bar}   -> 0
-e.g. {string index abcde 2}   -> c
-e.g. {string length ""}       -> 0
-e.g. {string length foo}      -> 3
-e.g. {string range hello 1 3} -> ell
-e.g. {string tolower Tcl}     -> tcl
-e.g. {string toupper Tcl}     -> TCL
-e.g. {string trim " foo "}    -> foo
+e.g. {string compare a b}       -> -1
+e.g. {string compare b a}       -> 1
+e.g. {string compare b b}       -> 0
+e.g. {string equal foo foo}     -> 1
+e.g. {string equal foo bar}     -> 0
+e.g. {string index abcde 2}     -> c
+e.g. {string length ""}         -> 0
+e.g. {string length foo}        -> 3
+e.g. {string range hello 1 3}   -> ell
+e.g. {string range hello 1 end} -> ello
+e.g. {string tolower Tcl}       -> tcl
+e.g. {string toupper Tcl}       -> TCL
+e.g. {string trim " foo "}      -> foo
 
-e.g. {set x a.\x62.c} -> a.b.c ;# severe malfunction, breaks test suite operation :(
+e.g. {set x a.\x62.c} -> a.b.c
+e.g. {set e \u20ac} -> "€" ;# breaks in node v0.6.19, works in v0.10.22
+
 
 puts "total $total tests, passed $passed, failed $fail"
 #----------- clean up variables used in tests
 foreach var [info vars] {
     set pos [lsearch $vars $var] ;# expr can't substitute commands yet
-    set neq [string compare $var vars]
     if {$var != "vars" && $pos < 0} {unset $var}
 }
-unset vars var pos neq
+unset vars var pos
 puts "vars now: [info vars]"
 puts "[llength [info commands]] commands implemented"
