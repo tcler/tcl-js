@@ -64,7 +64,7 @@ function TclInterp () {
     this.decrLevel = function() {
       this.callframe[this.level] = null;
       this.level--;
-      if (this.level < 0) throw "Exit application";
+      if (this.level < 0) this.level = 0;
       this.result = null;
     }
     this.getCommand = function(name) {
@@ -269,9 +269,10 @@ function TclInterp () {
 	  throw 'wrong # args: should be "dict keys dictionary ?globPattern?"';
 	var dict    = args[1].toList();
 	var pattern = ".*";
-	if(args.length == 3) pattern = "^"+args[2].toString().replace(/\*/g,".*");
+	if(args.length == 3) 
+	  pattern = "^"+args[2].toString().replace(/\*/g,".*");
 	var res  = [];
-	for (var i=0;i < dict.length;i+=2) {
+	for (var i = 0; i < dict.length; i+=2) {
 	  if(dict[i].toString().match(pattern)) res.push(dict[i]);
 	}
 	return res;
@@ -398,13 +399,8 @@ function TclInterp () {
 	return interp.dirname(args[1].toString());
      });
     this.dirname = function(p) { // also used in [glob]
-      //require("path"); //not working :(
-      //return path.dirname(p.toString());
-      if(p == ".") p = process.cwd();
-      p = p.split("/"); 
-      p.pop();
-      if(p == "") return("/");
-      return p.join("/");
+      var path = require("path");
+      return path.dirname(p.toString());
     };
     this.registerSubCommand("file", "exists", function (interp, args) {
         this.arity(args, 2);
@@ -420,16 +416,34 @@ function TclInterp () {
 	res = (res == fn)? "" : "."+res;
 	return res;
      });
+    this.registerSubCommand("file", "join", function (interp, args) {
+        this.arity(args, 2, Infinity);
+	args.shift();
+	var res = "", sep = "";
+	for (var arg in args) {
+	  var part = args[arg].toString();
+	  if(part.match("^[/]")) 
+	    res = part; else res = res+sep+part;
+	  sep = "/";
+	}
+	return res;
+      });
     this.registerSubCommand("file", "mtime", function (interp, args) {
         this.arity(args, 2);
 	var stat = fs.statSync(args[1].toString());
 	return stat.mtime.getTime()/1000;
-      })
+      });
     this.registerSubCommand("file", "size", function (interp, args) {
         this.arity(args, 2);
 	var stat = fs.statSync(args[1].toString());
 	return stat.size;
-      })
+      });
+    this.registerSubCommand("file", "split", function (interp, args) {
+        this.arity(args, 2);
+	var path = args[1].toString().split("/");
+	if(path[0] == "") path[0] = "/";
+	return path;
+      });
     this.registerSubCommand("file", "tail", function (interp, args) {
         this.arity(args, 2);
 	return args[1].toString().split("/").pop();
@@ -499,7 +513,7 @@ function TclInterp () {
 	//}
 	return; // result will be in interp.buf when done
      });
-   this.gets = function(char) {
+/*   this.gets = function(char) {
      try {
        if(char.match(/foo[\r\n]/)) {
 	 this.getsing = 0;
@@ -509,7 +523,7 @@ function TclInterp () {
 	 this.buf += char;
        }
      } catch(e) {puts(e)};
-   }
+   }*/
    this.registerCommand("glob", function (interp, args) {
 	this.arity(args, 2, Infinity);
 	args.shift();

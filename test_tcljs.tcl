@@ -102,6 +102,10 @@ e.g. {file dirname foo/bar/grill}  -> foo/bar
 e.g. {file dirname /foo/bar/grill} -> /foo/bar
 e.g. {file extension foo.txt}      -> .txt
 e.g. {file extension Makefile}     -> ""
+e.g. {file join a b c}             -> a/b/c
+e.g. {file join a /b c}            -> /b/c
+e.g. {file split a/b/c}            -> {a b c}
+e.g. {file split /a/b/c}           -> {/ a b c}
 e.g. {file tail foo/bar/grill}     -> grill
 
 set forres ""
