@@ -321,18 +321,6 @@ function TclInterp () {
 	}
 	return dict;
       });
-    /*
-      if(typeof(jQuery) != 'undefined') {
-      this.registerCommand("dom", function (interp, args) {
-      var selector = args[1].toString();
-      var fn = args[2].toString();
-      args = args.slice(3);
-      for (var i in args) args[i] = args[i].toString();
-      var q = $(selector);
-      q[fn].apply(q,args);
-      return "dom    " + selector;
-      });
-      }*/
     this.registerCommand("eval",function (interp, args) {
         this.arity(args, 2,Infinity);
         for (var i = 1; i < args.length; i++) args[i] = args[i].toString();
@@ -364,16 +352,15 @@ function TclInterp () {
 	if (args.length == 2) rc = args[1];
 	process.exit(rc);
       });
-    var acos = Math.acos;
-    var exp  = Math.exp;
-    var sqrt = Math.sqrt; // "publish" other Math.* functions as needed
-
     this.registerCommand("expr", function (interp, args) {
 	var expression = args.slice(1).join(" ");
 	return interp.expr(interp, expression);
       });
     this.expr = function (interp, expression) { // also used in for, if, while
       var mx;
+      var acos = Math.acos;
+      var exp  = Math.exp;
+      var sqrt = Math.sqrt; // "publish" other Math.* functions as needed
       try {
 	mx = expression.match(/(\[.*\])/g);
 	for (var i in mx)
@@ -461,14 +448,14 @@ function TclInterp () {
             test = interp.objectify(interp.expr(interp, cond));
             if (!test.toBoolean()) break;
             interp.eval(body);
-            var ic = interp.code; // tested after step command
+            var ic = interp.code; // will be tested after step command
             interp.eval(step);
             if(ic == interp.BRK) break;
             if(ic == interp.CNT) continue;
         }
         interp.inLoop = false;
         if(interp.code == interp.BRK || interp.code == interp.CNT)
-            interp.code = interp.OK;
+	  interp.code = interp.OK;
         return "";
     });
     this.registerCommand("foreach", function (interp, args) {
@@ -601,15 +588,8 @@ function TclInterp () {
 	try {interp.getVar(name); return 1;} catch(e) {return 0;}
     });
     this.registerSubCommand("info", "globals", function (interp, args) {
-        return interp.mkList(interp.callframe[0]);
+        return interp.infovars(0);
     });
-    /* not in "real" Tcl
-    this.registerSubCommand("info", "isensemble", function (interp, args) {
-        this.arity(args, 2);
-        var name = args[1].toString();
-	var cmd  = interp.getCommand(name);
-        return (cmd != null && cmd.ensemble != null)? "1" : "0";
-	}); */
     this.registerSubCommand("info", "level", function (interp, args) {
 	if(args.length == 1)
 	  return interp.level;
@@ -629,14 +609,17 @@ function TclInterp () {
         return interp.script;
     });
     this.registerSubCommand("info", "vars", function (interp, args) {
-	var res = [];
-	for(var i in interp.callframe[interp.level]) {
-	  try {
-	    if(interp.getVar(i) != null) {res.push(i);}
-	  } catch(e) {};
-	}
-	return res;
-    });
+	return interp.infovars(interp.level);
+      });
+    this.infovars = function(level) { // also used in [info globals]
+      var res = [];
+      for(var i in this.callframe[level]) {
+	try {
+	  if(this.getVar(i) != null) {res.push(i);}
+	} catch(e) {};
+      }
+      return res;
+    }
     this.registerCommand("join", function (interp, args) {
 	this.arity(args, 2, 3);
 	var lst = args[1].toList();
